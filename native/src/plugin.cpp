@@ -75,6 +75,26 @@ void on_update() {
 
 } // namespace
 
+/**
+ * Load-time breadcrumb. REFramework logs a failed LoadLibrary without the
+ * Windows error code, so this writes one line per attach/detach to
+ * reframework/data/sf6-web-bridge/load.log: if the line is there, the
+ * loader mapped the DLL and the problem is later; if it is missing, the
+ * loader (or something in front of it) refused the file before any of
+ * our code ran. Nothing else happens here — DllMain must stay trivial.
+ */
+BOOL APIENTRY DllMain(HMODULE, DWORD reason, LPVOID) {
+    if (reason == DLL_PROCESS_ATTACH || reason == DLL_PROCESS_DETACH) {
+        std::error_code ec;
+        std::filesystem::create_directories(DATA_DIR, ec);
+        if (std::ofstream f{std::string{DATA_DIR} + "/load.log", std::ios::app}; f) {
+            f << (reason == DLL_PROCESS_ATTACH ? "attach " : "detach ") << SF6_WEB_BRIDGE_VERSION << "\n";
+        }
+        OutputDebugStringA(reason == DLL_PROCESS_ATTACH ? "[sf6-web-bridge] attach\n" : "[sf6-web-bridge] detach\n");
+    }
+    return TRUE;
+}
+
 extern "C" __declspec(dllexport) void reframework_plugin_required_version(REFrameworkPluginVersion* version) {
     version->major = REFRAMEWORK_PLUGIN_VERSION_MAJOR;
     version->minor = REFRAMEWORK_PLUGIN_VERSION_MINOR;

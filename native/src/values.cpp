@@ -183,4 +183,18 @@ std::string hex(const void* p, size_t n) {
     return out;
 }
 
+std::wstring to_wide(const std::string& utf8) {
+#ifdef _WIN32
+    if (utf8.empty()) {
+        return {};
+    }
+    const int need = MultiByteToWideChar(CP_UTF8, 0, utf8.data(), static_cast<int>(utf8.size()), nullptr, 0);
+    std::wstring out(static_cast<size_t>(need), L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, utf8.data(), static_cast<int>(utf8.size()), out.data(), need);
+    return out;
+#else
+    return std::wstring{utf8.begin(), utf8.end()};
+#endif
+}
+
 } // namespace bridge::values

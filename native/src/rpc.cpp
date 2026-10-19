@@ -254,7 +254,7 @@ reframework::InvokeRet Rpc::invoke(const Handle& h, const std::string& method, c
             if (a.is_null()) {
                 packed[i] = nullptr;
             } else if (a.is_string()) {
-                packed[i] = API::get()->create_managed_string_normal(a.get<std::string>().c_str());
+                packed[i] = API::get()->sdk()->functions->create_managed_string(values::to_wide(a.get<std::string>()).c_str());
             } else {
                 throw std::runtime_error("argument " + std::to_string(i) + " must be a string");
             }

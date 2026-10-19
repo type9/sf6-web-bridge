@@ -60,4 +60,7 @@ std::string read_managed_string(const void* s);
 
 std::string hex(const void* p, size_t n);
 
+/** UTF-8 → UTF-16 for the SDK's managed-string constructor. */
+std::wstring to_wide(const std::string& utf8);
+
 } // namespace bridge::values

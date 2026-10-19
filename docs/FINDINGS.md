@@ -79,6 +79,26 @@ All ten bits verified. Diagonals are ORed directions (`up+back` = 5). Drive Impa
 
 Evidence (second session, same day): HP/LK/MK taps read `hp ×4, lk ×5, mk ×6`; the four diagonals read `up+back, down+back, down+forward, up+forward` with one-frame single-direction edges on entry; DI/parry/throw read `hp+hk ×4, mp+mk ×9, lp+lk ×6`. First session: a recording of "hold forward, tap LP, MP, HK" read `8×50, 0×12, 16×7, 0×20, 32×8, 0×30, 512×7`; a recording of "up, down, back, forward" read `1×32, 0×48, 2×25, 0×74, 4×31, 0×48, 8×28, 0×44`. Swapping 1↔2 and 4↔8 in place made the dummy play the mirrored sequence.
 
+### Dummy settings (verified 2026-10-19 by changing one menu row at a time and diffing)
+
+All under `app.training.TrainingManager._tData`. Each line is the field that moved when the named menu row was changed by one step, with the label the menu showed at the new value.
+
+| menu row (Dummy Settings) | field | type | observed |
+|---|---|---|---|
+| Dummy Behavior | `DummyStatus.DummyData.DummyActionType` | `app.training.TM_DS_DUMMYTYPE` | 0 → 1, shown "Standing" |
+| Counter | `CounterSetting.DummyData.NC_TYPE` | `app.training.TM_COMMON_TYPE` | 0 → 1, "Always Counter" |
+| Block | `GuardSetting.DummyData.GuardType` | `app.training.TM_GS_GUARD_TYPE` | 3 → 5 on one step, "Block Count" (the enum has values the menu skips) |
+| Block Count | `GuardSetting.DummyData.GuardCount` | `System.Int32` | 2 → 3, menu shows 4 (display = stored + 1) |
+| Switch Block | `GuardSetting.DummyData.GuardOnlyType` | `app.training.TM_GS_ONLY_TYPE` | 0 → 1, "Standing Block Only" |
+| Block Type | not found in these four objects | | no diff; may live elsewhere or was unchanged |
+| Drive Reversal | `DefenseSystem.DummyData.DR_Type` | `app.training.DRIVE_REVERSAL_TYPE` | 0 → 1, "On Block" |
+| Drive Reversal Activation Delay | `DefenseSystem.DummyData.DR_DelayFrame` | `System.UInt32` | 0 → 1, "1F" |
+| Drive Reversal Activation Count | `DefenseSystem.DummyData.DR_DelayCount` | `System.UInt32` | 0 → 1, menu shows 2 (display = stored + 1) |
+| Throw Escape | `DefenseSystem.DummyData.GD_Type` | `app.training.TM_COMMON_TYPE` | 0 → 1, "Active" |
+| Recovery | `DefenseSystem.DummyData.QS_Type` | `app.training.TM_DS_QS_TYPE` | 1 → 2, "Random" |
+
+Corrections to the community mod: Switch Block is `GuardOnlyType` (the mod used `IsGuardSwitching` for it and `GuardOnlyType` for Block Type); Throw Escape "Active" is 1, not 0; Dummy Behavior "Standing" reads 1 where the mod has Stand = 0. Full label lists come from the enums' static members (dev page: "Enum values"); record them here when dumped.
+
 ## Inferred from the community drill mod — NOT verified by us
 
 The "SF6 Drill Share" REFramework Lua mod (`sf6_training_share.lua`, `sf6-training-drill-share/action_record_io.lua`) fills record slots, including empty ones, like this. Its authors mark several of their own field names as unverified; treat every line below as a hypothesis to smoke-test, one write at a time, and move each line up into the verified section with a date once it has been seen working.
@@ -93,7 +113,7 @@ Filling a slot (`RecordSlots[n]`), in the mod's order:
 
 Other paths the mod uses, all unverified here:
 
-- Dummy settings: `_tData.DummyStatus.DummyData.DummyActionType` (stance), `_tData.GuardSetting.DummyData.{GuardType, GuardCount, IsGuardSwitching, GuardOnlyType}`, `_tData.DefenseSystem.DummyData.{QS_Type, GD_Type, DR_Type, DR_DelayFrame, DR_DelayCount}`, `_tData.CounterSetting.DummyData.{NC_TYPE, PC_TYPE}`.
+- Dummy settings: see the verified table above; still unverified from the mod's list are `GuardSetting.DummyData.IsGuardSwitching` and `CounterSetting.DummyData.PC_TYPE`.
 - Record settings on `RecordSetting`: `RecordType, RecordStartType, RecordCountDown, PlayType, InfoType, LoopType`.
 - Reversal lists on `_tData.ReversalSetting.FighterDataList[fid].{DownReversalDatas, GuardReversalDatas, DamageReversalDatas}[0..9]` with fields `Count, Delay, Frame, IsActive, IsFrame, IsValid, Level, SkillIndex, Type`.
 - Gauges from the static `gBattle` type: `Player.mcPlayer[i].focus_new` (drive), `Team.mcTeam[i].mSuperGauge` (super).
@@ -104,6 +124,6 @@ Other paths the mod uses, all unverified here:
 - Whether `FighterID` values match the community roster table.
 - Whether a slot needs more than `Num`, `Frame`, `IsActive`, `IsValid` to become playable when written from empty; the in-place edit kept the game's own metadata. An untouched slot's `buff` is a zero-length array (seen 2026-10-19), so filling one always means replacing the buffer.
 - Array allocation: plugin API 1.10 has no `create_managed_array`; v0.1.3 adds `array.create` through the game's `System.Array.CreateInstance`, untested.
-- Reversal settings, dummy settings and gauges: the community mod's field names (`GuardSetting.DummyData.GuardType`, `DefenseSystem.DummyData.QS_Type`, …) are unverified here.
+- Reversal settings and gauges: the community mod's field names are unverified here (dummy settings are now verified, see above). Block Type's field is still unlocated.
 - Replay lookup by code and friend requests by user ID: singletons not yet identified (candidates from the mod: `app.BattleReplayDataManager`, `app.BattleWatchManager`; network side unknown).
 - `System.String` layout (length at `0x10`, UTF-16 at `0x14`) has not been exercised yet; no string field was read.

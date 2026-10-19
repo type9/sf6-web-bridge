@@ -37,6 +37,9 @@ Managed singleton by full type name, e.g. `app.training.TrainingManager`. → re
 ### `type.find` `{name}`
 → `{h, type, static: true}` or `null`. A type-only handle: `field.get` / `method.call` work for static members.
 
+### `type.search` `{q}`
+Case-insensitive substring search over all type names (≥ 3 characters). → `{q, scanned, truncated, types: [...]}`, capped at 500 names. Slow-ish on first use (the whole type database is walked).
+
 ### `object.describe` `{h}`
 → `{type, parent, valuetype, size, fields: [{name, type, static, offset}], methods: [{name, returns, static, params: [{name, type}]}]}`
 

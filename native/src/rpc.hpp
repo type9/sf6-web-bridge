@@ -44,6 +44,7 @@ private:
     nlohmann::json op_singleton_get(const nlohmann::json& p);
     nlohmann::json op_singletons_list();
     nlohmann::json op_type_find(const nlohmann::json& p);
+    nlohmann::json op_type_search(const nlohmann::json& p);
     nlohmann::json op_object_describe(const nlohmann::json& p);
     nlohmann::json op_field_get(const nlohmann::json& p);
     nlohmann::json op_field_set(const nlohmann::json& p);

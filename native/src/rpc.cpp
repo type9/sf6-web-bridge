@@ -1,6 +1,7 @@
 #include "rpc.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -22,6 +23,7 @@ constexpr std::string_view CODE_ALPHABET = "BCDFGHJKMNPQRSTVWXYZ23456789";
 constexpr size_t CODE_LENGTH = 6;
 constexpr size_t MAX_ARRAY_READ = 100000;
 constexpr size_t MAX_PEEK = 4096;
+constexpr size_t MAX_TYPE_SEARCH_RESULTS = 500;
 
 std::string make_code() {
     std::random_device rd;
@@ -137,6 +139,7 @@ json Rpc::dispatch(const std::string& op, const json& p) {
     if (op == "singleton.get") return op_singleton_get(p);
     if (op == "singletons.list") return op_singletons_list();
     if (op == "type.find") return op_type_find(p);
+    if (op == "type.search") return op_type_search(p);
     if (op == "object.describe") return op_object_describe(p);
     if (op == "field.get") return op_field_get(p);
     if (op == "field.set") return op_field_set(p);
@@ -341,6 +344,37 @@ json Rpc::op_type_find(const json& p) {
     // A type-only handle: static fields and static methods work on it.
     const auto id = m_handles.put(nullptr, t, false);
     return json{{"h", id}, {"type", t->get_full_name()}, {"static", true}};
+}
+
+/**
+ * Case-insensitive substring search over every type name in the type
+ * database. The TDB has ~200k types, so the first call takes a moment;
+ * results are capped. This is how the UI-flow classes that wrap the CFN
+ * endpoints get found.
+ */
+json Rpc::op_type_search(const json& p) {
+    auto needle = need_string(p, "q");
+    if (needle.size() < 3) {
+        throw std::runtime_error("`q` needs at least 3 characters");
+    }
+    std::transform(needle.begin(), needle.end(), needle.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    const auto tdb = API::get()->tdb();
+    const auto n = tdb->get_num_types();
+    auto out = json::array();
+    std::string lower;
+    for (uint32_t i = 0; i < n && out.size() < MAX_TYPE_SEARCH_RESULTS; i++) {
+        const auto t = tdb->get_type(i);
+        if (t == nullptr) {
+            continue;
+        }
+        const auto name = t->get_full_name();
+        lower.assign(name);
+        std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (lower.find(needle) != std::string::npos) {
+            out.push_back(name);
+        }
+    }
+    return json{{"q", needle}, {"scanned", n}, {"truncated", out.size() >= MAX_TYPE_SEARCH_RESULTS}, {"types", out}};
 }
 
 json Rpc::op_object_describe(const json& p) {

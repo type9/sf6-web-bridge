@@ -199,6 +199,11 @@ export class Sf6Bridge {
 		return this.request("type.find", { name })
 	}
 
+	/** Substring search over every type name in the game (≥ 3 chars); capped at 500. */
+	searchTypes(q: string): Promise<{ q: string; scanned: number; truncated: boolean; types: string[] }> {
+		return this.request("type.search", { q })
+	}
+
 	describe(ref: Ref): Promise<TypeDescription> {
 		return this.request("object.describe", { h: ref.h })
 	}

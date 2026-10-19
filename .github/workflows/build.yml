@@ -25,6 +25,15 @@ jobs:
           $dll = "build/Release/sf6-web-bridge.dll"
           if (!(Test-Path $dll)) { throw "dll missing" }
           & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -find "VC\Tools\MSVC\**\bin\Hostx64\x64\dumpbin.exe" | Select-Object -First 1 | ForEach-Object { & $_ /EXPORTS $dll }
+      - name: bare LoadLibrary check
+        shell: pwsh
+        run: |
+          $sig = '[DllImport("kernel32.dll", SetLastError=true, CharSet=CharSet.Unicode)] public static extern IntPtr LoadLibrary(string p);'
+          $k = Add-Type -MemberDefinition $sig -Name K -Namespace W -PassThru
+          $h = $k::LoadLibrary((Resolve-Path "build/Release/sf6-web-bridge.dll").Path)
+          $err = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
+          if ($h -eq [IntPtr]::Zero) { throw "LoadLibrary failed, Win32 error $err" }
+          Write-Host "LoadLibrary ok: $h"
       - uses: actions/upload-artifact@v4
         with:
           name: sf6-web-bridge-dll

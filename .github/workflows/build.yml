@@ -1,0 +1,54 @@
+# Builds the plugin DLL on every push and PR, and attaches it to a GitHub
+# Release on a version tag (v0.1.0). No Windows machine needed locally:
+# this is the only build path.
+name: build
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  native:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: configure
+        run: cmake -S native -B build -A x64
+      - name: build
+        run: cmake --build build --config Release --parallel
+      - name: show exports
+        shell: pwsh
+        run: |
+          $dll = "build/Release/sf6-web-bridge.dll"
+          if (!(Test-Path $dll)) { throw "dll missing" }
+          & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -find "VC\Tools\MSVC\**\bin\Hostx64\x64\dumpbin.exe" | Select-Object -First 1 | ForEach-Object { & $_ /EXPORTS $dll }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sf6-web-bridge-dll
+          path: build/Release/sf6-web-bridge.dll
+          if-no-files-found: error
+      - name: release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/Release/sf6-web-bridge.dll
+          generate_release_notes: true
+  client:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: pnpm install
+      - run: pnpm run type-check
+      - run: pnpm run build

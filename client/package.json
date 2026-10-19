@@ -1,0 +1,52 @@
+{
+	"name": "@type9/sf6-web-bridge",
+	"version": "0.1.0",
+	"description": "Browser client for the sf6-web-bridge REFramework plugin: talk to a running Street Fighter 6 over a loopback WebSocket (reflection RPC, training-mode helpers).",
+	"license": "MIT",
+	"private": false,
+	"type": "module",
+	"sideEffects": false,
+	"keywords": [
+		"street-fighter-6",
+		"sf6",
+		"reframework",
+		"websocket",
+		"training-mode"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/type9/sf6-web-bridge.git",
+		"directory": "client"
+	},
+	"homepage": "https://github.com/type9/sf6-web-bridge#readme",
+	"bugs": {
+		"url": "https://github.com/type9/sf6-web-bridge/issues"
+	},
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"publishConfig": {
+		"access": "public",
+		"exports": {
+			".": {
+				"types": "./dist/index.d.ts",
+				"default": "./dist/index.js"
+			}
+		},
+		"main": "./dist/index.js",
+		"types": "./dist/index.d.ts"
+	},
+	"scripts": {
+		"build": "tsup",
+		"type-check": "tsc --noEmit",
+		"lint": "eslint ./src/**/*.ts --fix"
+	},
+	"devDependencies": {
+		"tsup": "^8.5.0",
+		"typescript": "^5.7.3"
+	}
+}

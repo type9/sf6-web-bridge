@@ -151,12 +151,16 @@ Type-only handles work: `type.find` on `app.training.TrainingData` then `field.g
 app.network.NetworkManager                          managed singleton
   .<WebApi>k__BackingField                          app.network.NetworkWebApiManager
     .<Hato>k__BackingField                          app.network.HatoWebApiControl   (CFN backend)
-      .<Api>k__BackingField                         app.network.api.HatoClientAPI.HatoClientAPI  (one method per endpoint; not yet described)
+      .<Api>k__BackingField                         app.network.api.HatoClientAPI.HatoClientAPI
+        .<replay>k__BackingField                    …HatoClientAPI.Api.Replay        (replay endpoints; search by code expected here)
+        .<fighters_list>k__BackingField             …HatoClientAPI.Api.FightersList  (follow / fighters list)
+        .<fighter>k__BackingField                   …HatoClientAPI.Api.Fighter       (fighter lookup / profile)
+        also: auth, chat, circle, inventory, mail, mame, matching, mode_select, multi_menu, ogym, ranking, rewards, rival_ai, shop, sys, debug
       .<ShortId>k__BackingField                     uint — the player's own CFN user code
     .<RebeWlt>k__BackingField, .<Kpi>k__BackingField other backends (wallet, telemetry)
 ```
 
-`HatoWebApiControl` itself holds login-time state (league points, exam state, banner, manner grade, signed URL) and no search methods; those are on the `HatoClientAPI` client it wraps. Dump: `docs/dumps/2026-10-19-tdb71/hato-web-api-control.md`.
+`HatoWebApiControl` itself holds login-time state (league points, exam state, banner, manner grade, signed URL) and no search methods; those are on the `HatoClientAPI` client it wraps. Dumps: `docs/dumps/2026-10-19-tdb71/hato-web-api-control.md`, `hato-client-api.md`.
 
 ### Type dumps
 

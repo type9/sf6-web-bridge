@@ -2,7 +2,7 @@
 
 A [REFramework](https://github.com/praydog/REFramework) plugin that lets a web page talk to a running copy of Street Fighter 6 on the same PC. It opens a WebSocket on `127.0.0.1` and forwards a small set of REFramework's reflection calls (find a singleton, read or write a field, call a method, read or write an array) so the game-specific logic can live in the browser and change without rebuilding the plugin.
 
-Built for sharing training-mode drills and reading frame data from [lossless.fm](https://lossless.fm). Generic enough for any RE Engine game REFramework runs on.
+Built to share training-mode drills and read frame data from a web app, and generic enough for any RE Engine game REFramework runs on. The plugin itself has no idea who is on the other end: any site you allow can use it.
 
 ```
 browser ──ws://127.0.0.1:47821──▶ sf6-web-bridge.dll ──REFramework SDK──▶ game objects
@@ -21,17 +21,17 @@ browser ──ws://127.0.0.1:47821──▶ sf6-web-bridge.dll ──REFramework
 
 4. A site that supports the bridge asks for that code once. Nothing else runs on your machine, nothing listens outside loopback, and uninstalling is deleting the one file.
 
-The plugin only accepts browser connections from an allowlist of origins (`lossless.fm`, `dev.lossless.fm`, `localhost:3000`). To add your own, create `reframework/data/sf6-web-bridge/config.json`:
+The plugin only accepts browser connections from an allowlist of origins. Out of the box that is local development only (`http://localhost:3000`, `http://localhost:5173` and the `127.0.0.1` equivalents). Any site that should be able to use the bridge goes in `reframework/data/sf6-web-bridge/config.json`:
 
 ```json
-{ "port": 47821, "origins": ["http://localhost:5173"] }
+{ "port": 47821, "origins": ["https://example.com"] }
 ```
 
 Every operation except `ping` requires the pairing code, so a page that is allowed to connect still cannot touch the game until you type the code into it.
 
 ## Smoke test (first run)
 
-Each step gates the next. Open the browser DevTools console on `https://dev.lossless.fm` (or any allowed origin) and paste:
+Each step gates the next. Open the browser DevTools console on an allowed origin (a page served from `http://localhost:3000`, or a site you added to `config.json`) and paste:
 
 ```js
 const ws = new WebSocket("ws://127.0.0.1:47821")

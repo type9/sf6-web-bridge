@@ -24,13 +24,16 @@ namespace {
 
 constexpr int DEFAULT_PORT = 47821;
 
-/** Origins allowed to open a socket; file-less clients (no Origin) are allowed too. */
+/**
+ * Origins allowed to open a socket. Local development only by default;
+ * every site a player wants to use goes in config.json (see load_config).
+ * Clients without an Origin header (command-line tools) are allowed too.
+ */
 const std::vector<std::string> DEFAULT_ORIGINS{
-    "https://lossless.fm",
-    "https://www.lossless.fm",
-    "https://dev.lossless.fm",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
 };
 
 /** Relative to the game's working directory, which is the game folder. */

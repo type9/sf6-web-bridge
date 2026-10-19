@@ -144,6 +144,7 @@ json Rpc::dispatch(const std::string& op, const json& p) {
     if (op == "array.len") return op_array_len(p);
     if (op == "array.get") return op_array_get(p);
     if (op == "array.set") return op_array_set(p);
+    if (op == "array.create") return op_array_create(p);
     if (op == "mem.peek") return op_mem_peek(p);
     if (op == "handle.release") return op_handle_release(p);
     if (op == "training.summary") return op_training_summary();
@@ -401,19 +402,94 @@ json Rpc::op_field_set(const json& p) {
         throw std::runtime_error("no field `" + name + "` on " + t->get_full_name());
     }
     const auto k = values::kind_of(f->get_type());
-    if (!values::is_primitive(k)) {
-        throw std::runtime_error("field.set only writes primitives and enums");
-    }
     const auto owner = f->is_static() ? nullptr : h.ptr;
     const auto ptr = f->get_data_raw(owner, !h.managed && owner != nullptr);
     if (ptr == nullptr) {
         throw std::runtime_error("field `" + name + "` has no storage");
     }
     const auto it = p.find("value");
-    if (it == p.end() || !values::write_at(ptr, k, *it)) {
-        throw std::runtime_error("`value` does not fit " + f->get_type()->get_full_name());
+    if (it == p.end()) {
+        throw std::runtime_error("missing `value`");
     }
-    return values::read_at(ptr, k);
+    if (values::is_primitive(k)) {
+        if (!values::write_at(ptr, k, *it)) {
+            throw std::runtime_error("`value` does not fit " + f->get_type()->get_full_name());
+        }
+        return values::read_at(ptr, k);
+    }
+    if (k == Kind::Object) {
+        // EXPERIMENTAL. Stores a reference: null or a managed handle. The
+        // new referent gets a reference added so the game can keep it;
+        // the previous referent is left alone (a leak beats a crash). The
+        // drill mod fills empty record slots this way (see FINDINGS).
+        void* next = nullptr;
+        if (!it->is_null()) {
+            if (!(it->is_object() && it->contains("h"))) {
+                throw std::runtime_error("`value` must be null or {h} for a reference field");
+            }
+            const auto& target = need_handle(*it, "h");
+            if (!target.managed) {
+                throw std::runtime_error("`value` must be a managed object handle");
+            }
+            next = target.ptr;
+            static_cast<API::ManagedObject*>(next)->add_ref();
+        }
+        std::memcpy(ptr, &next, sizeof(next));
+        return it->is_null() ? json(nullptr) : *it;
+    }
+    throw std::runtime_error("field.set writes primitives, enums and object references only");
+}
+
+/**
+ * EXPERIMENTAL. Allocate a managed array through the game's own
+ * System.Array.CreateInstance(Type, int). The result is pinned with a
+ * reference for the life of the process, so it can be stored into a game
+ * field and survive the client's handle being released. Plugin API 1.10
+ * has no create_managed_array, hence this route.
+ */
+json Rpc::op_array_create(const json& p) {
+    const auto elem = need_string(p, "element");
+    const auto length = p.value("length", 0);
+    if (length <= 0 || length > (1 << 20)) {
+        throw std::runtime_error("`length` must be 1..1048576");
+    }
+    const auto& api = API::get();
+    const auto type_obj = api->sdk()->functions->typeof_(elem.c_str());
+    if (type_obj == nullptr) {
+        throw std::runtime_error("typeof(" + elem + ") failed");
+    }
+    const auto array_t = api->tdb()->find_type("System.Array");
+    if (array_t == nullptr) {
+        throw std::runtime_error("System.Array not found");
+    }
+    API::Method* m = nullptr;
+    for (const auto cand : array_t->get_methods()) {
+        if (std::string_view{cand->get_name()} != "CreateInstance" || cand->get_num_params() != 2) {
+            continue;
+        }
+        const auto params = cand->get_params();
+        const auto p1 = reinterpret_cast<API::TypeDefinition*>(params[1].t);
+        if (p1 != nullptr && p1->get_full_name() == "System.Int32") {
+            m = cand;
+            break;
+        }
+    }
+    if (m == nullptr) {
+        throw std::runtime_error("System.Array.CreateInstance(Type, int) not found");
+    }
+    std::vector<void*> args{type_obj, nullptr};
+    if (!values::pack_arg(args[1], Kind::I32, json(length))) {
+        throw std::runtime_error("bad length");
+    }
+    const auto ret = m->invoke(nullptr, args);
+    if (ret.exception_thrown || ret.ptr == nullptr) {
+        throw std::runtime_error("CreateInstance threw or returned null");
+    }
+    const auto arr = static_cast<API::ManagedObject*>(ret.ptr);
+    arr->add_ref(); // pinned for the process lifetime
+    auto out = ref(arr);
+    out["pinned"] = true;
+    return out;
 }
 
 json Rpc::op_method_call(const json& p) {

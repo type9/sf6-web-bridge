@@ -10,7 +10,7 @@ cmake_minimum_required(VERSION 3.21)
 cmake_policy(SET CMP0091 NEW)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-project(sf6-web-bridge LANGUAGES C CXX VERSION 0.1.2)
+project(sf6-web-bridge LANGUAGES C CXX VERSION 0.1.3)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

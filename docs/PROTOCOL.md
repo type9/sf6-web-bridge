@@ -44,7 +44,7 @@ Managed singleton by full type name, e.g. `app.training.TrainingManager`. → re
 → value (see table).
 
 ### `field.set` `{h, name, value}`
-Primitives and enums only. → the value read back.
+Primitives and enums → the value read back. Reference fields (experimental) accept `null` or `{h}` of a managed object; the new referent gets a reference added, the old one is left alone.
 
 ### `method.call` `{h, name, args?: []}`
 Arguments by position: numbers / booleans for primitives, strings for `System.String`, `null` or `{h}` for references and value types. → return value, `null` for `void`. Fails if the game throws.
@@ -57,6 +57,9 @@ Arguments by position: numbers / booleans for primitives, strings for `System.St
 
 ### `array.set` `{h, from, values: [...]}`
 Primitive element types only; never grows the array. → `{from, written, length}`
+
+### `array.create` `{element, length}` — experimental
+Allocates a managed array through `System.Array.CreateInstance(Type, int)` and pins it for the process lifetime. → ref with `pinned: true`.
 
 ### `mem.peek` `{h, size?: 64}`
 → `{bytes: "<hex>"}` of the handle's memory, up to 4096 bytes. For checking layouts.
@@ -72,4 +75,4 @@ Convenience walk of `app.training.TrainingManager._tData`. → `{inTraining, p1F
 - Binds `127.0.0.1` only.
 - Browser connections must send an allowed `Origin`; connections with no `Origin` (command-line tools) are accepted.
 - Nothing but `ping` works before `hello` with the pairing code, which changes every launch.
-- Writes are limited to primitive fields and primitive array elements.
+- Writes: primitive fields and array elements, plus (experimental) reference fields and array allocation. No native-pointer writes.

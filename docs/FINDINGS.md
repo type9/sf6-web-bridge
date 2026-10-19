@@ -79,12 +79,32 @@ Diagonals and multi-button presses are presumably ORed; not yet recorded. Bits 1
 
 Evidence: a recording of "hold forward, tap LP, MP, HK" read `8×50, 0×12, 16×7, 0×20, 32×8, 0×30, 512×7`; a recording of "up, down, back, forward" read `1×32, 0×48, 2×25, 0×74, 4×31, 0×48, 8×28, 0×44`. Swapping 1↔2 and 4↔8 in place made the dummy play the mirrored sequence.
 
+## Inferred from the community drill mod — NOT verified by us
+
+The "SF6 Drill Share" REFramework Lua mod (`sf6_training_share.lua`, `sf6-training-drill-share/action_record_io.lua`) fills record slots, including empty ones, like this. Its authors mark several of their own field names as unverified; treat every line below as a hypothesis to smoke-test, one write at a time, and move each line up into the verified section with a date once it has been seen working.
+
+Filling a slot (`RecordSlots[n]`), in the mod's order:
+
+1. If `InputData.buff` is null or shorter than the recording, allocate a new `System.UInt16[]` of `max(frames, 3600)`, pin it (`add_ref_permanent` in Lua), and store it into `InputData.buff`. The mod notes that an unpinned buffer was freed by the GC and crashed the game on the next training reset. Our equivalent: `array.create {element: "System.UInt16", length: 3600}` (pinned) followed by `field.set {h: inputData, name: "buff", value: {h: newArray}}`.
+2. Write the slot: `IsActive` (bool), `IsValid` (bool, true when frames > 0), `Weight` (int, 1 if 0), `Frame` (int, frame count).
+3. Write `Title` (`System.Guid`, inline). An all-zero GUID shows an empty name in the menu; the mod writes a constant GUID for every active slot: `mData1 = 231974219, mData2 = 56247, mData3 = 18493, mData4_0..7 = 138, 211, 88, 121, 158, 17, 216, 197`.
+4. Write `InputData`: `Num` (int, == Frame), `isLoop` (bool), `State` (int; 1 when active or frames > 0), `cmd_type` (int, 0), `negativeEdge` (bool), `Cursor` (int, 0), `IsForceStop` (bool, false), then the masks into `buff[0..Num)`.
+5. Bump `TrainingData.SaveCount` by one "to notify the engine". Unclear whether the game needs it.
+
+Other paths the mod uses, all unverified here:
+
+- Dummy settings: `_tData.DummyStatus.DummyData.DummyActionType` (stance), `_tData.GuardSetting.DummyData.{GuardType, GuardCount, IsGuardSwitching, GuardOnlyType}`, `_tData.DefenseSystem.DummyData.{QS_Type, GD_Type, DR_Type, DR_DelayFrame, DR_DelayCount}`, `_tData.CounterSetting.DummyData.{NC_TYPE, PC_TYPE}`.
+- Record settings on `RecordSetting`: `RecordType, RecordStartType, RecordCountDown, PlayType, InfoType, LoopType`.
+- Reversal lists on `_tData.ReversalSetting.FighterDataList[fid].{DownReversalDatas, GuardReversalDatas, DamageReversalDatas}[0..9]` with fields `Count, Delay, Frame, IsActive, IsFrame, IsValid, Level, SkillIndex, Type`.
+- Gauges from the static `gBattle` type: `Player.mcPlayer[i].focus_new` (drive), `Team.mcTeam[i].mSuperGauge` (super).
+- Roster: 1 Ryu, 2 Luke, 3 Kimberly, 4 Chun-Li, 5 Manon, 6 Zangief, 7 JP, 8 Dhalsim, 9 Cammy, 10 Ken, 11 Dee Jay, 12 Lily, 13 A.K.I., 14 Rashid, 15 Blanka, 16 Juri, 17 Marisa, 18 Guile, 19 Ed, 20 E. Honda, 21 Jamie, 22 Akuma, 25 Sagat, 26 M. Bison, 27 Terry, 28 Mai, 29 Elena, 30 C. Viper, 31 Alex, 32 Ingrid, 33 Yasmin, 34 Arjun. Our one data point (10 = the operator's dummy, 19 = the operator's character) is consistent with it.
+
 ## Open questions
 
 - Whether `FighterID` values match the community roster table.
 - Bits 10 and up of the input mask (DI, parry, throw macros, taunt).
 - Whether a slot needs more than `Num`, `Frame`, `IsActive`, `IsValid` to become playable when written from empty; the in-place edit kept the game's own metadata.
-- Array allocation: plugin API 1.10 has no `create_managed_array`, so filling an empty slot whose `buff` is null needs another route (reuse a recorded slot's buffer, or a game method that allocates).
+- Array allocation: plugin API 1.10 has no `create_managed_array`; v0.1.3 adds `array.create` through the game's `System.Array.CreateInstance`, untested.
 - Reversal settings, dummy settings and gauges: the community mod's field names (`GuardSetting.DummyData.GuardType`, `DefenseSystem.DummyData.QS_Type`, …) are unverified here.
 - Replay lookup by code and friend requests by user ID: singletons not yet identified (candidates from the mod: `app.BattleReplayDataManager`, `app.BattleWatchManager`; network side unknown).
 - `System.String` layout (length at `0x10`, UTF-16 at `0x14`) has not been exercised yet; no string field was read.

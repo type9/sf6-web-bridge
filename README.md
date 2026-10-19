@@ -15,7 +15,7 @@ browser ──ws://127.0.0.1:47821──▶ sf6-web-bridge.dll ──REFramework
 3. Start the game. REFramework's log (`reframework_log.txt` in the game folder, also visible in the REFramework overlay) shows:
 
    ```
-   [sf6-web-bridge] v0.1.2 listening on ws://127.0.0.1:47821
+   [sf6-web-bridge] v0.1.3 listening on ws://127.0.0.1:47821
    [sf6-web-bridge] pairing code: XXXXXX (also in reframework/data/sf6-web-bridge/pairing.txt)
    ```
 
@@ -62,7 +62,7 @@ Dependencies are fetched by CMake: [IXWebSocket](https://github.com/machinezone/
 - **Game thread.** The socket thread only queues requests. `UpdateBehavior` drains them each frame, so every SDK call happens where REFramework expects it.
 - **Handles.** Objects are returned as `{h, type}`; the plugin holds a reference on managed objects until `handle.release`. Value types inline in another object are `{h, type, vt: true}` and stay valid as long as their owner does.
 - **Assumed layouts.** Only one: `System.String` (length at `0x10`, UTF-16 at `0x14`). Arrays go through the type's own `get_Length` / `Get` / `Set` methods rather than raw offsets. `mem.peek` exists to check layouts on a new build.
-- **Writes.** `field.set` and `array.set` accept primitives and enums only. Object references and array allocation are deliberately not exposed yet.
+- **Writes.** `field.set` and `array.set` accept primitives and enums; `field.set` on a reference field and `array.create` exist as experimental ops for filling empty record slots (see FINDINGS). Pointers are never written raw.
 
 ## License
 

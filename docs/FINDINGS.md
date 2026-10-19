@@ -53,7 +53,7 @@ app.training.TrainingManager                      managed singleton
           [n].Title                               System.Guid (inline)
           [n].InputData                           TM_RecordSetting.RecordData
             .Num                                  int   frames recorded (== Frame)
-            .buff                                 UInt16[3600]  one input mask per frame, 60 s capacity
+            .buff                                 UInt16[3600] once recorded; an UNTOUCHED slot holds a UInt16[0], not null
 ```
 
 Fighter IDs seen: 19 (player), 10 (dummy). The community mod's roster table says 10 = Ken, 19 = Ed; unconfirmed from our side.
@@ -70,14 +70,14 @@ Recorded on the P2 side, so "forward" is toward P1.
 | 3 | 8 | forward |
 | 4 | 16 | LP |
 | 5 | 32 | MP |
-| 6 | 64 | HP (inferred from the pattern) |
-| 7 | 128 | LK (inferred) |
-| 8 | 256 | MK (inferred) |
+| 6 | 64 | HP |
+| 7 | 128 | LK |
+| 8 | 256 | MK |
 | 9 | 512 | HK |
 
-Diagonals and multi-button presses are presumably ORed; not yet recorded. Bits 10+ unknown (Drive Impact / Parry macros are candidates). The community mod's table (`LP = 1 … PARRY = 0x80`) is wrong for this build.
+All ten bits verified. Diagonals are ORed directions (`up+back` = 5). Drive Impact, Drive Parry and throw are stored as their two buttons ORed (`hp+hk`, `mp+mk`, `lp+lk`); no bits above 9 appeared. The community mod's table (`LP = 1 … PARRY = 0x80`) is wrong for this build.
 
-Evidence: a recording of "hold forward, tap LP, MP, HK" read `8×50, 0×12, 16×7, 0×20, 32×8, 0×30, 512×7`; a recording of "up, down, back, forward" read `1×32, 0×48, 2×25, 0×74, 4×31, 0×48, 8×28, 0×44`. Swapping 1↔2 and 4↔8 in place made the dummy play the mirrored sequence.
+Evidence (second session, same day): HP/LK/MK taps read `hp ×4, lk ×5, mk ×6`; the four diagonals read `up+back, down+back, down+forward, up+forward` with one-frame single-direction edges on entry; DI/parry/throw read `hp+hk ×4, mp+mk ×9, lp+lk ×6`. First session: a recording of "hold forward, tap LP, MP, HK" read `8×50, 0×12, 16×7, 0×20, 32×8, 0×30, 512×7`; a recording of "up, down, back, forward" read `1×32, 0×48, 2×25, 0×74, 4×31, 0×48, 8×28, 0×44`. Swapping 1↔2 and 4↔8 in place made the dummy play the mirrored sequence.
 
 ## Inferred from the community drill mod — NOT verified by us
 
@@ -102,8 +102,7 @@ Other paths the mod uses, all unverified here:
 ## Open questions
 
 - Whether `FighterID` values match the community roster table.
-- Bits 10 and up of the input mask (DI, parry, throw macros, taunt).
-- Whether a slot needs more than `Num`, `Frame`, `IsActive`, `IsValid` to become playable when written from empty; the in-place edit kept the game's own metadata.
+- Whether a slot needs more than `Num`, `Frame`, `IsActive`, `IsValid` to become playable when written from empty; the in-place edit kept the game's own metadata. An untouched slot's `buff` is a zero-length array (seen 2026-10-19), so filling one always means replacing the buffer.
 - Array allocation: plugin API 1.10 has no `create_managed_array`; v0.1.3 adds `array.create` through the game's `System.Array.CreateInstance`, untested.
 - Reversal settings, dummy settings and gauges: the community mod's field names (`GuardSetting.DummyData.GuardType`, `DefenseSystem.DummyData.QS_Type`, …) are unverified here.
 - Replay lookup by code and friend requests by user ID: singletons not yet identified (candidates from the mod: `app.BattleReplayDataManager`, `app.BattleWatchManager`; network side unknown).

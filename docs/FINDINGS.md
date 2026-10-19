@@ -130,10 +130,20 @@ Other paths the mod uses, all unverified here:
 - Gauges from the static `gBattle` type: `Player.mcPlayer[i].focus_new` (drive), `Team.mcTeam[i].mSuperGauge` (super).
 - Roster: 1 Ryu, 2 Luke, 3 Kimberly, 4 Chun-Li, 5 Manon, 6 Zangief, 7 JP, 8 Dhalsim, 9 Cammy, 10 Ken, 11 Dee Jay, 12 Lily, 13 A.K.I., 14 Rashid, 15 Blanka, 16 Juri, 17 Marisa, 18 Guile, 19 Ed, 20 E. Honda, 21 Jamie, 22 Akuma, 25 Sagat, 26 M. Bison, 27 Terry, 28 Mai, 29 Elena, 30 C. Viper, 31 Alex, 32 Ingrid, 33 Yasmin, 34 Arjun. Our one data point (10 = the operator's dummy, 19 = the operator's character) is consistent with it.
 
+### Type dumps
+
+`docs/dumps/2026-10-19-tdb71/training-types.md` holds `object.describe` for TrainingData, TM_RecordSetting, its FighterData list, FighterData, SlotData and RecordData. Points of interest from it:
+
+- `app.training.TrainingData` derives from `app.storage.SaveDataBase`: the training settings and recordings are save data, which is why `SaveCount` exists. Writes to them may persist across sessions once the game saves.
+- `TM_RecordSetting.RecordData` converts to `app.TrainingInput.Record` (`op_Implicit`, `DeepCopy(app.TrainingInput.Record)`): there is a runtime recording object separate from the save-data one. Candidate for where the menu's frame count label and the live playback state come from.
+- `SlotData.Title` is a `System.Guid`, so slot names are keyed, not free text; the drill mod's constant GUID presumably selects a stock name.
+- `TrainingData` statics `TRAINING_PLAYER_COUNT`, `FIGHTER_NUM`, `SHORT_CUT_DATA_NUM`, `PLAYER_ID`, `DUMMY_PLAYER_ID`, `RECORD_MAX` are readable through a type-only handle (`type.find` + `field.get`).
+- Other settings groups for a full drill capture: `ParameterSetting`, `DisplaySetting`, `OtherSetting`, `ShortCutSetting`, `TempData`, plus `ReversalSetting`.
+
 ## Open questions
 
 - Whether `FighterID` values match the community roster table.
-- Which of `Title` / `SaveCount` makes the menu show a filled slot's name and frame count (playback works without either).
+- Which of `Title` / `SaveCount` makes the menu show a filled slot's name and frame count (playback works without either); or whether the label reads the runtime `app.TrainingInput.Record` copy instead.
 - Array allocation: plugin API 1.10 has no `create_managed_array`; v0.1.3 adds `array.create` through the game's `System.Array.CreateInstance`, untested.
 - Reversal settings and gauges: the community mod's field names are unverified here (dummy settings are now verified, see above).
 - Replay lookup by code and friend requests by user ID: singletons not yet identified (candidates from the mod: `app.BattleReplayDataManager`, `app.BattleWatchManager`; network side unknown).

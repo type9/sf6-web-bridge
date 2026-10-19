@@ -243,7 +243,7 @@ reframework::InvokeRet Rpc::invoke(const Handle& h, const std::string& method, c
     }
     std::vector<void*> packed(params.size(), nullptr);
     for (size_t i = 0; i < params.size(); i++) {
-        const auto pt = static_cast<API::TypeDefinition*>(params[i].t);
+        const auto pt = reinterpret_cast<API::TypeDefinition*>(params[i].t);
         const auto k = values::kind_of(pt);
         const auto& a = arg_list[i];
         if (values::is_primitive(k)) {
@@ -325,7 +325,7 @@ json Rpc::op_singleton_get(const json& p) {
 json Rpc::op_singletons_list() {
     auto out = json::array();
     for (const auto& s : API::get()->get_managed_singletons()) {
-        const auto t = static_cast<API::TypeDefinition*>(s.t);
+        const auto t = reinterpret_cast<API::TypeDefinition*>(s.t);
         out.push_back(t != nullptr ? t->get_full_name() : "?");
     }
     return out;
@@ -362,7 +362,7 @@ json Rpc::op_object_describe(const json& p) {
     for (const auto m : t->get_methods()) {
         auto params = json::array();
         for (const auto& prm : m->get_params()) {
-            const auto pt = static_cast<API::TypeDefinition*>(prm.t);
+            const auto pt = reinterpret_cast<API::TypeDefinition*>(prm.t);
             params.push_back(json{{"name", prm.name != nullptr ? prm.name : ""}, {"type", pt != nullptr ? pt->get_full_name() : "?"}});
         }
         const auto rt = m->get_return_type();

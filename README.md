@@ -15,9 +15,11 @@ browser ──ws://127.0.0.1:47821──▶ sf6-web-bridge.dll ──REFramework
 3. Start the game. REFramework's log (`reframework_log.txt` in the game folder, also visible in the REFramework overlay) shows:
 
    ```
-   [sf6-web-bridge] v0.1.3 listening on ws://127.0.0.1:47821
+   [sf6-web-bridge] v0.1.4 listening on ws://127.0.0.1:47821
    [sf6-web-bridge] pairing code: XXXXXX (also in reframework/data/sf6-web-bridge/pairing.txt)
    ```
+
+   The code is also copied to the Windows clipboard at launch, so pairing is a paste (`"clipboard": false` in `config.json` turns that off).
 
 4. A site that supports the bridge asks for that code once. Nothing else runs on your machine, nothing listens outside loopback, and uninstalling is deleting the one file.
 

@@ -6,6 +6,7 @@
 // reflection ops in rpc.cpp.
 #include <Windows.h>
 
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -41,9 +42,11 @@ bridge::Rpc g_rpc;
 struct Config {
     int port{DEFAULT_PORT};
     std::vector<std::string> origins{DEFAULT_ORIGINS};
+    /** Put the pairing code on the Windows clipboard at launch, so pairing is a paste. */
+    bool clipboard{true};
 };
 
-/** Optional `config.json` in the data dir: `{"port": 47821, "origins": ["https://example.com"]}`. A non-empty `origins` restricts browsers to those sites. */
+/** Optional `config.json` in the data dir: `{"port": 47821, "origins": ["https://example.com"], "clipboard": true}`. A non-empty `origins` restricts browsers to those sites. */
 Config load_config() {
     Config cfg;
     std::ifstream f{std::string{DATA_DIR} + "/config.json"};
@@ -55,6 +58,7 @@ Config load_config() {
         return cfg;
     }
     cfg.port = j.value("port", cfg.port);
+    cfg.clipboard = j.value("clipboard", cfg.clipboard);
     if (const auto it = j.find("origins"); it != j.end() && it->is_array()) {
         cfg.origins.clear();
         for (const auto& o : *it) {
@@ -64,6 +68,26 @@ Config load_config() {
         }
     }
     return cfg;
+}
+
+/** Best effort; the log and pairing.txt remain the source of truth. */
+void copy_to_clipboard(const std::string& text) {
+    if (!OpenClipboard(nullptr)) {
+        return;
+    }
+    EmptyClipboard();
+    if (const auto mem = GlobalAlloc(GMEM_MOVEABLE, text.size() + 1); mem != nullptr) {
+        if (const auto dst = GlobalLock(mem); dst != nullptr) {
+            std::memcpy(dst, text.c_str(), text.size() + 1);
+            GlobalUnlock(mem);
+            if (SetClipboardData(CF_TEXT, mem) == nullptr) {
+                GlobalFree(mem);
+            }
+        } else {
+            GlobalFree(mem);
+        }
+    }
+    CloseClipboard();
 }
 
 void on_update() {
@@ -124,5 +148,9 @@ extern "C" __declspec(dllexport) bool reframework_plugin_initialize(const REFram
 
     api->log_info("[sf6-web-bridge] v%s listening on ws://127.0.0.1:%d", SF6_WEB_BRIDGE_VERSION, cfg.port);
     api->log_info("[sf6-web-bridge] pairing code: %s (also in %s/pairing.txt)", g_rpc.pairing_code().c_str(), DATA_DIR);
+    if (cfg.clipboard) {
+        copy_to_clipboard(g_rpc.pairing_code());
+        api->log_info("[sf6-web-bridge] pairing code copied to the clipboard (config.json \"clipboard\": false to disable)");
+    }
     return true;
 }

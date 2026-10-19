@@ -21,8 +21,11 @@ Server::~Server() {
 }
 
 bool Server::origin_allowed(const std::string& origin) const {
+    if (m_origins.empty()) {
+        return true; // no allowlist configured: the pairing code gates every op
+    }
     if (origin.empty()) {
-        return true; // not a browser (wscat, scripts): the pairing code still gates every op
+        return true; // not a browser (wscat, scripts)
     }
     for (const auto& o : m_origins) {
         if (o == origin) {

@@ -25,16 +25,12 @@ namespace {
 constexpr int DEFAULT_PORT = 47821;
 
 /**
- * Origins allowed to open a socket. Local development only by default;
- * every site a player wants to use goes in config.json (see load_config).
- * Clients without an Origin header (command-line tools) are allowed too.
+ * Origins allowed to open a socket. Empty = any origin: the per-launch
+ * pairing code is the real gate, and a site cannot do anything but `ping`
+ * without it. A player who wants to pin the bridge to specific sites lists
+ * them in config.json (see load_config).
  */
-const std::vector<std::string> DEFAULT_ORIGINS{
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-};
+const std::vector<std::string> DEFAULT_ORIGINS{};
 
 /** Relative to the game's working directory, which is the game folder. */
 constexpr const char* DATA_DIR = "reframework/data/sf6-web-bridge";
@@ -47,7 +43,7 @@ struct Config {
     std::vector<std::string> origins{DEFAULT_ORIGINS};
 };
 
-/** Optional `config.json` in the data dir: `{"port": 47821, "origins": [...]}`. */
+/** Optional `config.json` in the data dir: `{"port": 47821, "origins": ["https://example.com"]}`. A non-empty `origins` restricts browsers to those sites. */
 Config load_config() {
     Config cfg;
     std::ifstream f{std::string{DATA_DIR} + "/config.json"};
@@ -60,13 +56,12 @@ Config load_config() {
     }
     cfg.port = j.value("port", cfg.port);
     if (const auto it = j.find("origins"); it != j.end() && it->is_array()) {
-        std::vector<std::string> extra;
+        cfg.origins.clear();
         for (const auto& o : *it) {
             if (o.is_string()) {
-                extra.push_back(o.get<std::string>());
+                cfg.origins.push_back(o.get<std::string>());
             }
         }
-        cfg.origins.insert(cfg.origins.end(), extra.begin(), extra.end());
     }
     return cfg;
 }

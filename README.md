@@ -21,7 +21,7 @@ browser ──ws://127.0.0.1:47821──▶ sf6-web-bridge.dll ──REFramework
 
 4. A site that supports the bridge asks for that code once. Nothing else runs on your machine, nothing listens outside loopback, and uninstalling is deleting the one file.
 
-The plugin only accepts browser connections from an allowlist of origins. Out of the box that is local development only (`http://localhost:3000`, `http://localhost:5173` and the `127.0.0.1` equivalents). Any site that should be able to use the bridge goes in `reframework/data/sf6-web-bridge/config.json`:
+Any site can open the socket; the pairing code is what gates it, and a site cannot do anything but `ping` without the code. If you would rather pin the bridge to specific sites, list them in `reframework/data/sf6-web-bridge/config.json` and every other origin is refused:
 
 ```json
 { "port": 47821, "origins": ["https://example.com"] }
@@ -31,7 +31,7 @@ Every operation except `ping` requires the pairing code, so a page that is allow
 
 ## Smoke test (first run)
 
-Each step gates the next. Open the browser DevTools console on an allowed origin (a page served from `http://localhost:3000`, or a site you added to `config.json`) and paste:
+Each step gates the next. Open the browser DevTools console on any https page and paste:
 
 ```js
 const ws = new WebSocket("ws://127.0.0.1:47821")

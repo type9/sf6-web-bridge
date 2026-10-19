@@ -77,6 +77,16 @@ Paste back: all six, whole. They go into `docs/dumps/`.
 
 ## T6 — Where replays and friends live
 
+The managers exist at all times (see `docs/dumps/2026-10-19-tdb71/singletons.md`), so the snapshot/diff of singletons is not expected to show much. Describe the managers directly instead, from the raw op console:
+
+1. Op `singleton.get`, params `{"name":"app.BattleReplayDataManager"}`. Note the handle.
+2. Op `object.describe`, params `{"h": <handle>}`. Paste the whole entry.
+3. Same two steps for `app.BattleWatchManager`, `app.InviteManager`, `app.FighterProfileSyncManager`, `app.global.FighterProfileManager`.
+
+Method names with `Search`, `Request`, `Code`, `Id`, `Friend`, `Invite` are the leads. The original snapshot/diff steps are still useful once a menu is open, to catch objects that are created on demand.
+
+### (original T6 steps)
+
 Do: from Training Mode, click **Snapshot singletons**. Back out to the main menu, open the replay browser, search any replay code, and leave the result on screen. Click **Diff singletons**.
 Expect: a short "added" list; those are the replay-related managers.
 

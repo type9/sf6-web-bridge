@@ -130,6 +130,12 @@ Other paths the mod uses, all unverified here:
 - Gauges from the static `gBattle` type: `Player.mcPlayer[i].focus_new` (drive), `Team.mcTeam[i].mSuperGauge` (super).
 - Roster: 1 Ryu, 2 Luke, 3 Kimberly, 4 Chun-Li, 5 Manon, 6 Zangief, 7 JP, 8 Dhalsim, 9 Cammy, 10 Ken, 11 Dee Jay, 12 Lily, 13 A.K.I., 14 Rashid, 15 Blanka, 16 Juri, 17 Marisa, 18 Guile, 19 Ed, 20 E. Honda, 21 Jamie, 22 Akuma, 25 Sagat, 26 M. Bison, 27 Terry, 28 Mai, 29 Elena, 30 C. Viper, 31 Alex, 32 Ingrid, 33 Yasmin, 34 Arjun. Our one data point (10 = the operator's dummy, 19 = the operator's character) is consistent with it.
 
+### Constants and singletons (verified 2026-10-19)
+
+Type-only handles work: `type.find` on `app.training.TrainingData` then `field.get` of its statics gave `RECORD_MAX = 8`, `FIGHTER_NUM = 60` (the record list held 35 entries, so this is the roster ceiling, not the current count), `DUMMY_PLAYER_ID = 1`.
+
+`docs/dumps/2026-10-19-tdb71/singletons.md` is the full managed singleton list from Training Mode. There is no `TrainingInput` singleton, so the runtime recording copy hangs off something else (a component or `TrainingManager` field). Managers to describe for later phases: `app.BattleReplayDataManager`, `app.BattleWatchManager`, `app.BattleUploadManager` (replays); `app.network.NetworkManager`, `app.InviteManager`, `app.FighterProfileSyncManager`, `app.global.FighterProfileManager` (players and friends); `app.esports.BattleTimeLineManager` and `app.esports.timeline.BattleTimelineManager2nd` (possibly the frame timeline the esports overlay uses).
+
 ### Type dumps
 
 `docs/dumps/2026-10-19-tdb71/training-types.md` holds `object.describe` for TrainingData, TM_RecordSetting, its FighterData list, FighterData, SlotData and RecordData. Points of interest from it:

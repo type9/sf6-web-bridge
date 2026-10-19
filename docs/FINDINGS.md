@@ -162,6 +162,18 @@ app.network.NetworkManager                          managed singleton
 
 `HatoWebApiControl` itself holds login-time state (league points, exam state, banner, manner grade, signed URL) and no search methods; those are on the `HatoClientAPI` client it wraps. Dumps: `docs/dumps/2026-10-19-tdb71/hato-web-api-control.md`, `hato-client-api.md`.
 
+### CFN endpoints for the meta-state features (read 2026-10-19; dumps `hato-api-*.md`)
+
+Every endpoint has the shape `Post<Name>(<Name>In body, System.Action<<Name>Out> on200, System.Action<CommonErrorOutput> on500)` on a per-group object reachable as `HatoClientAPI.<group>`.
+
+| feature | group | endpoints |
+|---|---|---|
+| replay by code | `Api.Replay` | `PostSearchReplayId` (search by replay ID / code), `PostDownloadUrl` (signed URL for the replay file), `PostInfo`, `PostSearchShortId` (replays of a user code), `PostSearchFighterId`, `PostMyReplay`, `PostRegister*` (bookmarks) |
+| player by user code | `Api.Fighter` | `PostSearchShortId`, `PostSearchFighterId`, `PostSearchSimple`, `PostSearchDetailed`, `PostProfile`, `PostRelationship` |
+| follow | `Api.FightersList` | `PostFollow`, `PostFollowDelete`, `PostFollowList`; friend requests exist too (`PostFriendRequests`, `PostTopFriendRequestAccept` …) but ride the platform's friend system |
+
+Constraint: the bridge cannot create the two delegate arguments, so these are not callable through `method.call` directly. Two routes: (a) drive the game's own menu-flow objects that wrap each endpoint into a plain method taking the code (needs a type search by substring to find them, plugin v0.1.5 `type.search`); (b) hook the `on200` handlers with REFramework's method hooks to observe results. The `*In` / `*Out` component types describe the request and response shapes and can be read with `type.find` + `object.describe` (e.g. `app.network.api.HatoClientAPI.Component.PostReplaySearchReplayIdIn`).
+
 ### Type dumps
 
 `docs/dumps/2026-10-19-tdb71/training-types.md` holds `object.describe` for TrainingData, TM_RecordSetting, its FighterData list, FighterData, SlotData and RecordData. Points of interest from it:
@@ -178,5 +190,5 @@ app.network.NetworkManager                          managed singleton
 - Which of `Title` / `SaveCount` makes the menu show a filled slot's name and frame count (playback works without either); or whether the label reads the runtime `app.TrainingInput.Record` copy instead.
 - Array allocation: plugin API 1.10 has no `create_managed_array`; v0.1.3 adds `array.create` through the game's `System.Array.CreateInstance`, untested.
 - Reversal settings and gauges: the community mod's field names are unverified here (dummy settings are now verified, see above).
-- Replay lookup by code and player lookup by user code: expected in `app.network.NetworkWebApiManager` (reached through `NetworkManager`), not yet described.
+- Replay lookup by code and player lookup by user code: endpoints identified (see CFN endpoints); the callable wrapper objects in the UI flow are not yet located.
 - `System.String` layout (length at `0x10`, UTF-16 at `0x14`) has not been exercised yet; no string field was read.

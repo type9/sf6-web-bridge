@@ -145,6 +145,19 @@ Type-only handles work: `type.find` on `app.training.TrainingData` then `field.g
 - `app.network.NetworkManager` is a hub of sub-managers (`WebApi`, `IdConverter`, `Session`, `Context`, …) that are NOT singletons; replay-by-code and player-by-user-code must live in `NetworkWebApiManager` (the `app.network.api.HatoClientAPI` client). Next: describe those sub-managers (dev page: "Describe network API").
 - `app.esports.BattleTimeLineManager` and `BattleTimelineManager2nd` are esports presentation (lighting, camera, env blending, RE Engine timelines), NOT frame data. But `BattleTimeLineManager` holds `_PlayerBehaviors: app.PlayerBehavior[]` and `_BattleCore: app.battle.uBattleCore`, which is a clean path to the live player objects. `BattleTimelineManager2nd` only exists while a battle scene is loaded (it disappeared from the singleton list on leaving Training Mode).
 
+### Network layer (read 2026-10-19)
+
+```
+app.network.NetworkManager                          managed singleton
+  .<WebApi>k__BackingField                          app.network.NetworkWebApiManager
+    .<Hato>k__BackingField                          app.network.HatoWebApiControl   (CFN backend)
+      .<Api>k__BackingField                         app.network.api.HatoClientAPI.HatoClientAPI  (one method per endpoint; not yet described)
+      .<ShortId>k__BackingField                     uint — the player's own CFN user code
+    .<RebeWlt>k__BackingField, .<Kpi>k__BackingField other backends (wallet, telemetry)
+```
+
+`HatoWebApiControl` itself holds login-time state (league points, exam state, banner, manner grade, signed URL) and no search methods; those are on the `HatoClientAPI` client it wraps. Dump: `docs/dumps/2026-10-19-tdb71/hato-web-api-control.md`.
+
 ### Type dumps
 
 `docs/dumps/2026-10-19-tdb71/training-types.md` holds `object.describe` for TrainingData, TM_RecordSetting, its FighterData list, FighterData, SlotData and RecordData. Points of interest from it:

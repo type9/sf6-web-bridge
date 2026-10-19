@@ -23,6 +23,7 @@
 		"url": "https://github.com/type9/sf6-web-bridge/issues"
 	},
 	"files": [
+		"src",
 		"dist",
 		"README.md"
 	],

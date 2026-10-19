@@ -136,6 +136,15 @@ Type-only handles work: `type.find` on `app.training.TrainingData` then `field.g
 
 `docs/dumps/2026-10-19-tdb71/singletons.md` is the full managed singleton list from Training Mode. There is no `TrainingInput` singleton, so the runtime recording copy hangs off something else (a component or `TrainingManager` field). Managers to describe for later phases: `app.BattleReplayDataManager`, `app.BattleWatchManager`, `app.BattleUploadManager` (replays); `app.network.NetworkManager`, `app.InviteManager`, `app.FighterProfileSyncManager`, `app.global.FighterProfileManager` (players and friends); `app.esports.BattleTimeLineManager` and `app.esports.timeline.BattleTimelineManager2nd` (possibly the frame timeline the esports overlay uses).
 
+### Managers for replays, friends and live battle (read 2026-10-19; dumps under `docs/dumps/2026-10-19-tdb71/managers-from-*.md`)
+
+- `app.BattleReplayDataManager` is local replay storage: save/load queues of `app.BattleReplaySaveData`, `_ReplayList` of `ReplayingData`, `_CurrentReplayID`, `IsTrainingReplay`, `EnjoyedReplayIdList`, a download-request flag. No search method: replay search by code is a web API call that ends in a download handed to this manager.
+- `app.BattleWatchManager` is live spectating (Battle Hub): `RequestStart(requestType, token)`, `BattleId`, `WatchToken`, key-frame stream. Not replays.
+- `app.InviteManager` is session invites for rooms (`RequestInvite`, `GetInviteCode`), not friend requests.
+- `app.FighterProfileSyncManager` pushes the player's own profile; `app.global.FighterProfileManager` renders profile pictures. Neither searches players.
+- `app.network.NetworkManager` is a hub of sub-managers (`WebApi`, `IdConverter`, `Session`, `Context`, …) that are NOT singletons; replay-by-code and player-by-user-code must live in `NetworkWebApiManager` (the `app.network.api.HatoClientAPI` client). Next: describe those sub-managers (dev page: "Describe network API").
+- `app.esports.BattleTimeLineManager` and `BattleTimelineManager2nd` are esports presentation (lighting, camera, env blending, RE Engine timelines), NOT frame data. But `BattleTimeLineManager` holds `_PlayerBehaviors: app.PlayerBehavior[]` and `_BattleCore: app.battle.uBattleCore`, which is a clean path to the live player objects. `BattleTimelineManager2nd` only exists while a battle scene is loaded (it disappeared from the singleton list on leaving Training Mode).
+
 ### Type dumps
 
 `docs/dumps/2026-10-19-tdb71/training-types.md` holds `object.describe` for TrainingData, TM_RecordSetting, its FighterData list, FighterData, SlotData and RecordData. Points of interest from it:
@@ -152,5 +161,5 @@ Type-only handles work: `type.find` on `app.training.TrainingData` then `field.g
 - Which of `Title` / `SaveCount` makes the menu show a filled slot's name and frame count (playback works without either); or whether the label reads the runtime `app.TrainingInput.Record` copy instead.
 - Array allocation: plugin API 1.10 has no `create_managed_array`; v0.1.3 adds `array.create` through the game's `System.Array.CreateInstance`, untested.
 - Reversal settings and gauges: the community mod's field names are unverified here (dummy settings are now verified, see above).
-- Replay lookup by code and friend requests by user ID: singletons not yet identified (candidates from the mod: `app.BattleReplayDataManager`, `app.BattleWatchManager`; network side unknown).
+- Replay lookup by code and player lookup by user code: expected in `app.network.NetworkWebApiManager` (reached through `NetworkManager`), not yet described.
 - `System.String` layout (length at `0x10`, UTF-16 at `0x14`) has not been exercised yet; no string field was read.

@@ -88,7 +88,7 @@ Cloning slot 1 into untouched slot 5 produced a slot the game plays. Steps that 
 3. `InputData`: `Num` = frames, `State` = 1, `Cursor` = 0, `isLoop` = false, `IsForceStop` = false.
 4. `SlotData`: `Frame` = frames, `Weight` = 1, `IsValid` = true, `IsActive` = true.
 
-Observed: the slot plays correctly, but the training menu shows no frame count for it. `Title` (GUID) and `TrainingData.SaveCount` were NOT written in this run; the drill mod writes both, and one of them presumably drives the label. To be isolated next run (the dev page's clone now does both, logged separately). Survival across a training reset (Select) with the pinned buffer: to be confirmed.
+Observed: the slot plays correctly, but the training menu shows no frame count for it. `Title` (GUID) and `TrainingData.SaveCount` were NOT written in this run; the drill mod writes both, and one of them presumably drives the label. To be isolated next run (the dev page's clone now does both, logged separately). Survival across a training reset with the pinned buffer: confirmed, the slot still plays after a reset and nothing crashed (the failure the drill mod hit with an unpinned buffer).
 
 ### Dummy settings (verified 2026-10-19 by changing one menu row at a time and diffing)
 

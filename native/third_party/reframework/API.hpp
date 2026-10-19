@@ -38,7 +38,6 @@ private:
 
 public:
     struct TDB;
-    struct Module;
     struct TypeDefinition;
     struct Method;
     struct Field;
@@ -143,21 +142,6 @@ public:
         return (API::ManagedObject*)fn(name);
     }
 
-    API::ManagedObject* create_managed_string(const wchar_t* str) const {
-        static const auto fn = sdk()->functions->create_managed_string;
-        return (API::ManagedObject*)fn(str);
-    }
-
-    API::ManagedObject* create_managed_string_normal(const char* str) const {
-        static const auto fn = sdk()->functions->create_managed_string_normal;
-        return (API::ManagedObject*)fn(str);
-    }
-
-    API::ManagedObject* create_managed_array(API::TypeDefinition* type, uint32_t size) const {
-        static const auto fn = sdk()->functions->create_managed_array;
-        return (API::ManagedObject*)fn(*type, size);
-    }
-
     API::ManagedObject* get_managed_singleton(std::string_view name) const {
         static const auto fn = sdk()->functions->get_managed_singleton;
         return (API::ManagedObject*)fn(name.data());
@@ -220,11 +204,6 @@ public:
     struct TDB {
         operator ::REFrameworkTDBHandle() const {
             return (::REFrameworkTDBHandle)this;
-        }
-
-        uint32_t get_num_modules() const {
-            static const auto fn = API::s_instance->sdk()->tdb->get_num_modules;
-            return fn(*this);
         }
 
         uint32_t get_num_types() const {
@@ -306,11 +285,6 @@ public:
             static const auto fn = API::s_instance->sdk()->tdb->get_property;
             return (API::Property*)fn(*this, index);
         }
-
-        API::Module* get_module(uint32_t index) const {
-            static const auto fn = API::s_instance->sdk()->tdb->get_module;
-            return (API::Module*)fn(*this, index);
-        }
     };
 
     struct REFramework {
@@ -321,75 +295,6 @@ public:
         bool is_drawing_ui() const {
             static const auto fn = API::s_instance->param()->functions->is_drawing_ui;
             return fn();
-        }
-    };
-
-    struct Module {
-        operator ::REFrameworkModuleHandle() const {
-            return (::REFrameworkModuleHandle)this;
-        }
-
-        uint16_t get_major() const {
-            static const auto fn = initialize()->get_major;
-            return fn(*this);
-        }
-
-        uint16_t get_minor() const {
-            static const auto fn = initialize()->get_minor;
-            return fn(*this);
-        }
-
-        uint16_t get_build() const {
-            static const auto fn = initialize()->get_build;
-            return fn(*this);
-        }
-
-        uint16_t get_revision() const {
-            static const auto fn = initialize()->get_revision;
-            return fn(*this);
-        }
-
-        const char* get_assembly_name() const {
-            static const auto fn = initialize()->get_assembly_name;
-            return fn(*this);
-        }
-
-        const char* get_location() const {
-            static const auto fn = initialize()->get_location;
-            return fn(*this);
-        }
-
-        const char* get_module_name() const {
-            static const auto fn = initialize()->get_module_name;
-            return fn(*this);
-        }
-
-        std::span<uint32_t> get_types() const {
-            static const auto get_num_types = initialize()->get_num_types;
-            static const auto get_types = initialize()->get_types;
-
-            auto start = get_types(*this);
-
-            return std::span<uint32_t>{start, (size_t)get_num_types(*this)};
-        }
-
-        std::span<uint32_t> get_methods() const {
-            static const auto get_num_methods = initialize()->get_num_methods;
-            static const auto get_methods = initialize()->get_methods;
-
-            auto start = get_methods(*this);
-
-            return std::span<uint32_t>{start, (size_t)get_num_methods(*this)};
-        }
-
-    private:
-        static inline const ::REFrameworkModule* s_functions{nullptr};
-        static inline const ::REFrameworkModule* initialize() {
-            if (s_functions == nullptr) {
-                s_functions = API::s_instance->sdk()->module;
-            }
-
-            return s_functions;
         }
     };
 
@@ -529,13 +434,7 @@ public:
             static const auto fn = API::s_instance->sdk()->type_definition->get_methods;
 
             std::vector<API::Method*> methods;
-
-            auto num_methods = get_num_methods();
-            if (num_methods < 1) {
-                return {};
-            }
-
-            methods.resize(num_methods);
+            methods.resize(get_num_methods());
 
             auto result = fn(*this, (REFrameworkMethodHandle*)&methods[0], methods.size() * sizeof(API::Method*), nullptr);
 
@@ -550,14 +449,7 @@ public:
             static const auto fn = API::s_instance->sdk()->type_definition->get_fields;
 
             std::vector<API::Field*> fields;
-            
-
-            auto num_fields = get_num_fields();
-            if (num_fields < 1) {
-                return {};
-            }
-
-            fields.resize(num_fields);
+            fields.resize(get_num_fields());
 
             auto result = fn(*this, (REFrameworkFieldHandle*)&fields[0], fields.size() * sizeof(API::Field*), nullptr);
 
@@ -622,12 +514,8 @@ public:
         reframework::InvokeRet invoke(API::ManagedObject* obj, const std::vector<void*>& args) {
             static const auto fn = API::s_instance->sdk()->method->invoke;
             reframework::InvokeRet out{};
-            REFrameworkResult result;
-            if (args.size() == 0) {
-                result = fn(*this, obj, nullptr, 0, &out, sizeof(out));
-            } else {
-                result = fn(*this, obj, (void**)&args[0], args.size() * sizeof(void*), &out, sizeof(out));
-            }
+
+            auto result = fn(*this, obj, (void**)&args[0], args.size() * sizeof(void*), &out, sizeof(out));
 
 #ifdef REFRAMEWORK_API_EXCEPTIONS
             if (result != REFRAMEWORK_ERROR_NONE) {
@@ -694,13 +582,7 @@ public:
             static const auto fn = API::s_instance->sdk()->method->get_params;
 
             std::vector<REFrameworkMethodParameter> params;
-
-            auto num_params = get_num_params();
-            if (num_params < 1) {
-                return {};
-            }
-
-            params.resize(num_params);
+            params.resize(get_num_params());
 
             auto result = fn(*this, (REFrameworkMethodParameter*)&params[0], params.size() * sizeof(REFrameworkMethodParameter), nullptr);
 
@@ -855,7 +737,7 @@ public:
             return fn(*this);
         }
 
-        int32_t get_ref_count() const {
+        uint32_t get_ref_count() const {
             static const auto fn = API::s_instance->sdk()->managed_object->get_ref_count;
             return fn(*this);
         }

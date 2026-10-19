@@ -15,7 +15,7 @@ browser ──ws://127.0.0.1:47821──▶ sf6-web-bridge.dll ──REFramework
 3. Start the game. REFramework's log (`reframework_log.txt` in the game folder, also visible in the REFramework overlay) shows:
 
    ```
-   [sf6-web-bridge] v0.1.0 listening on ws://127.0.0.1:47821
+   [sf6-web-bridge] v0.1.1 listening on ws://127.0.0.1:47821
    [sf6-web-bridge] pairing code: XXXXXX (also in reframework/data/sf6-web-bridge/pairing.txt)
    ```
 
@@ -82,7 +82,7 @@ cmake -S native -B build -A x64
 cmake --build build --config Release
 ```
 
-Dependencies are fetched by CMake: [IXWebSocket](https://github.com/machinezone/IXWebSocket) (no TLS, no zlib) and [nlohmann/json](https://github.com/nlohmann/json). The REFramework plugin API headers are vendored under `native/third_party/reframework` (MIT, praydog).
+Dependencies are fetched by CMake: [IXWebSocket](https://github.com/machinezone/IXWebSocket) (no TLS, no zlib) and [nlohmann/json](https://github.com/nlohmann/json). The REFramework plugin API headers are vendored under `native/third_party/reframework` (MIT, praydog) from the v1.5.9.1 release, plugin API 1.10, which is what the shipped REFramework reports. Headers from REFramework's master branch declare a newer API and make the loader refuse the plugin on a release build.
 
 ## Design notes
 

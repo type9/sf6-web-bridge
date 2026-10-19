@@ -29,45 +29,18 @@ Any site can open the socket; the pairing code is what gates it, and a site cann
 
 Every operation except `ping` requires the pairing code, so a page that is allowed to connect still cannot touch the game until you type the code into it.
 
-## Smoke test (first run)
+## Status
 
-Each step gates the next. Open the browser DevTools console on any https page and paste:
+Verified on 2026-10-19 against the Steam build with REFramework v1.5.9.1: the plugin loads, a browser reaches it from an https page, and Training Mode record slots can be read and written in place. The input mask and the object paths are in [docs/FINDINGS.md](docs/FINDINGS.md); what comes next is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
-```js
-const ws = new WebSocket("ws://127.0.0.1:47821")
-ws.onmessage = (e) => console.log(JSON.parse(e.data))
-ws.onopen = () => ws.send(JSON.stringify({ id: 1, op: "ping" }))
-```
+## Smoke test
 
-1. **Plugin loads.** The two log lines above appear after launch. If not, REFramework's log says why (wrong REFramework version, missing exports).
-2. **Browser reaches the socket.** The snippet prints `{id: 1, ok: true, result: {plugin: "sf6-web-bridge", ...}}`. `training` is `true` once you are in Training Mode.
-3. **Pair and read a live value.** In Training Mode:
+Two pasteable scripts for a browser DevTools console live in [`tools/`](tools/):
 
-   ```js
-   ws.send(JSON.stringify({ id: 2, op: "hello", code: "XXXXXX" }))
-   ws.send(JSON.stringify({ id: 3, op: "training.summary" }))
-   ```
+- `console-smoke.js` runs the gate sequence (ping, pair, training summary, slot walk, array read, optional in-place write with restore) and prints a markdown table for `docs/FINDINGS.md`. Run it after every game patch.
+- `console-rpc.js` defines `rpc`, `describe`, `path` and `peek` on `window` for exploring new objects.
 
-   Expect `p1FighterId` / `p2FighterId` numbers. Change the dummy character and run the summary again: `p2FighterId` changes. This proves the reflection path and the game-thread handoff.
-
-4. **Read a recording.** Record a known sequence into slot 1 of the dummy (hold forward, then tap LP, MP, HK), then walk to the buffer with the handles the summary returned:
-
-   ```js
-   // recordSetting.h from the summary; dummy id from p2FighterId
-   ws.send(JSON.stringify({ id: 4, op: "field.get", h: REC, name: "FighterDataList" }))
-   ws.send(JSON.stringify({ id: 5, op: "method.call", h: LIST, name: "get_Item", args: [DUMMY_ID] }))
-   ws.send(JSON.stringify({ id: 6, op: "field.get", h: FD, name: "RecordSlots" }))
-   ws.send(JSON.stringify({ id: 7, op: "array.get", h: SLOTS, from: 0, count: 1 }))
-   ws.send(JSON.stringify({ id: 8, op: "field.get", h: SLOT0, name: "InputData" }))
-   ws.send(JSON.stringify({ id: 9, op: "field.get", h: INPUT, name: "buff" }))
-   ws.send(JSON.stringify({ id: 10, op: "array.get", h: BUFF, from: 0, count: 200 }))
-   ```
-
-   The values are the per-frame input bitmasks. This step pins the bit layout.
-
-5. **Write a recording.** `array.set` the same values into slot 2's buffer and set its `Frame` / `Num` fields, then play slot 2 in the game. This is the risky step and the one that decides drill sharing.
-
-The field names come from the community "SF6 Drill Share" REFramework Lua mod and REFramework's Object Explorer; `object.describe` on any handle lists what a build actually has.
+Both need the game in Training Mode and the pairing code pasted into the `CODE` line. The same checks are available to a bundler as `runSmoke` in the client package.
 
 ## Protocol
 

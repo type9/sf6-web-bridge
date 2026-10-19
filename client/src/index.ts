@@ -6,6 +6,8 @@ import {
 } from "./constants"
 
 export { DEFAULT_PORT, DEFAULT_URL, PAIRING_FILE, PROTOCOL_VERSION } from "./constants"
+export { INPUT_BITS, decodeInputMask, encodeInputMask, runLengths, expandRunLengths, type InputName } from "./input-mask"
+export { runSmoke, smokeTable, type SmokeRow, type SmokeOptions } from "./smoke"
 
 /** A reference to an object inside the game. `vt` marks inline value-type storage. */
 export interface Ref {

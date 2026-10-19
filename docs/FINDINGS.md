@@ -79,6 +79,17 @@ All ten bits verified. Diagonals are ORed directions (`up+back` = 5). Drive Impa
 
 Evidence (second session, same day): HP/LK/MK taps read `hp ×4, lk ×5, mk ×6`; the four diagonals read `up+back, down+back, down+forward, up+forward` with one-frame single-direction edges on entry; DI/parry/throw read `hp+hk ×4, mp+mk ×9, lp+lk ×6`. First session: a recording of "hold forward, tap LP, MP, HK" read `8×50, 0×12, 16×7, 0×20, 32×8, 0×30, 512×7`; a recording of "up, down, back, forward" read `1×32, 0×48, 2×25, 0×74, 4×31, 0×48, 8×28, 0×44`. Swapping 1↔2 and 4↔8 in place made the dummy play the mirrored sequence.
 
+### Filling an empty record slot (verified 2026-10-19)
+
+Cloning slot 1 into untouched slot 5 produced a slot the game plays. Steps that were sufficient for playback:
+
+1. `array.create` `System.UInt16` × 3600 (through `System.Array.CreateInstance`, pinned), stored into `InputData.buff` with `field.set` — the untouched slot's own buffer is a zero-length array, so it has to be replaced.
+2. `array.set` the masks into the new buffer.
+3. `InputData`: `Num` = frames, `State` = 1, `Cursor` = 0, `isLoop` = false, `IsForceStop` = false.
+4. `SlotData`: `Frame` = frames, `Weight` = 1, `IsValid` = true, `IsActive` = true.
+
+Observed: the slot plays correctly, but the training menu shows no frame count for it. `Title` (GUID) and `TrainingData.SaveCount` were NOT written in this run; the drill mod writes both, and one of them presumably drives the label. To be isolated next run (the dev page's clone now does both, logged separately). Survival across a training reset (Select) with the pinned buffer: to be confirmed.
+
 ### Dummy settings (verified 2026-10-19 by changing one menu row at a time and diffing)
 
 All under `app.training.TrainingManager._tData`. Each line is the field that moved when the named menu row was changed by one step, with the label the menu showed at the new value.
@@ -122,7 +133,7 @@ Other paths the mod uses, all unverified here:
 ## Open questions
 
 - Whether `FighterID` values match the community roster table.
-- Whether a slot needs more than `Num`, `Frame`, `IsActive`, `IsValid` to become playable when written from empty; the in-place edit kept the game's own metadata. An untouched slot's `buff` is a zero-length array (seen 2026-10-19), so filling one always means replacing the buffer.
+- Which of `Title` / `SaveCount` makes the menu show a filled slot's name and frame count (playback works without either).
 - Array allocation: plugin API 1.10 has no `create_managed_array`; v0.1.3 adds `array.create` through the game's `System.Array.CreateInstance`, untested.
 - Reversal settings and gauges: the community mod's field names are unverified here (dummy settings are now verified, see above).
 - Replay lookup by code and friend requests by user ID: singletons not yet identified (candidates from the mod: `app.BattleReplayDataManager`, `app.BattleWatchManager`; network side unknown).

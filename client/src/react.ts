@@ -26,6 +26,8 @@ export interface UseSf6BridgeOptions {
 	autoConnect?: boolean
 	/** Re-ping interval while connected, ms; 0 disables. Default 5000. */
 	pingEveryMs?: number
+	/** Per-request timeout, ms. Default 5000. Long ops (hook removal while the game loads) need more. */
+	timeoutMs?: number
 }
 
 export interface Sf6BridgeState {
@@ -91,6 +93,7 @@ export function useSf6Bridge(opts: UseSf6BridgeOptions = {}): Sf6BridgeState {
 		try {
 			const b = await Sf6Bridge.connect({
 				url,
+				timeoutMs: opts.timeoutMs,
 				onClose: () => {
 					if (bridgeRef.current === b) {
 						bridgeRef.current = null

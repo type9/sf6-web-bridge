@@ -1,6 +1,6 @@
 {
 	"name": "@type9/sf6-web-bridge",
-	"version": "0.1.5",
+	"version": "0.1.6",
 	"description": "Browser client for the sf6-web-bridge REFramework plugin: talk to a running Street Fighter 6 over a loopback WebSocket (reflection RPC, training-mode helpers).",
 	"license": "MIT",
 	"private": false,

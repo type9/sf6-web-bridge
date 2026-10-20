@@ -209,6 +209,21 @@ In-game the player does: Replay › Search › Replay ID → types the code → 
 | popup | `app.UICFNReplayInfo.Start(FlowParam) → IUIFlowHandle`; `FlowParam(CommonReplayInfo data, bool isAllView, bool isResultDisp, bool isReplayViewEnable, Action replayViewEvent)`, field `_SharingData: CommonReplayInfo`; `MenuType` REPLAY 0, COMMENTATOR 1, REGIST 2, UNREGIST 3, PROFILE1 4, PROFILE2 5, SEARCH1 6, SEARCH2 7, RESULT_LIST 8; `FlowParamBase.MenuDecideEvent(UIFlowBase flow, MenuType)` |
 | watch | `app.UIFlowCFNCommon.CallReplayDownloadUrlApiFlow`1<UICFNReplayTopTabListBase.FlowParamBase>` (`OnCallApi()`) → `app.BattleReplayDataManager.AddReplayData(BattleReplayData, replayId, CommonReplayInfo, isRivalAi, ReplayPlaybackClientTab)` |
 
+Observed with the tracer (2026-10-19, `trace-replay-by-code.md`), one manual run, replay ID B4ENK6EW8, times relative to plugin start:
+
+```
+102.259  InputSearchIdWindowFlow.OnEnter(this)
+103.033  InputSearchIdWindowFlow.OnResultCallback(this, "B4ENK6EW8")
+103.036  CallSearchReplayIdApiFlow.OnCallApi(this)
+103.036  Api.Replay.PostSearchReplayId(this, PostReplaySearchReplayIdIn, Action<Out>, Action<CommonErrorOutput>)
+105.568  UICFNReplayInfo.Start(static, Action) → UIFlowManager.Handle      ← popup directly, no result-list screen for an ID search
+107.051  Api.Replay.PostDownloadUrl(this, PostReplayDownloadUrlIn, …)      ← Watch Replay pressed
+107.468  BattleReplayDataManager.AddReplayData(this, BattleReplayData, "B4ENK6EW8", CommonReplayInfo, false, ReplayPlaybackClientTab=99)
+137.900  UICFNReplaySearchResult.Start(static, Action) → Handle              ← only when backing out of the replay
+```
+
+So for a replay-ID search the game skips the list and opens the info popup; "Watch Replay" is the download call followed by `AddReplayData`. The hook also showed `UICFNReplayInfo.Start` / `UICFNReplaySearchResult.Start` taking a `System.Action` at runtime (the describe said `FlowParam`; the static is generic-ish or the describe is of a different overload). Calling `OnResultCallback` on a flow instance captured from an earlier, already-closed dialog did nothing (the hook saw the call, nothing followed), which is expected: the flow is dead once the dialog closes. The call must go to the live dialog. Two triggers are wired on the dev page: the flow's `OnResultCallback` on the live `InputSearchIdWindowFlow`, and the dialog widget itself (`app.UITextInputDialog`, captured from the return of `OpenTextInputDialog`) via `SetFixedText(id)` + `Decide()` or `InvokeResultEvent(id)`. Results pending.
+
 Every flow step is a parameterless object whose state comes from the flow machinery, so the clean trigger is the dialog's own callback: with the player on the Replay ID search item, call `OnResultCallback(code)` on the live `InputSearchIdWindowFlow` instance and the game continues exactly as if the code had been typed. The live instance is captured with the tracer (plugin ≥ 0.1.7, `hook.add` on `InputSearchIdWindowFlow.OnEnter`; `this` comes back as a handle). The dev page's Trace panel does this and fires the callback. Not yet exercised.
 
 ### Type dumps

@@ -76,6 +76,30 @@ Instantiates a managed class by full name through REFramework's `create_instance
 ### `training.summary`
 Convenience walk of `app.training.TrainingManager._tData`. → `{inTraining, p1FighterId, p2FighterId, recordFighterCount, trainingData: ref, recordSetting: ref}`. Fields that could not be read are `null` or `{error}` rather than failing the whole call.
 
+## Tracing (experimental)
+
+A method-call tracer for watching which game methods run, with which arguments, while the player drives a menu flow by hand. Hooks are installed through REFramework's `add_hook` (pre + post) on one of 16 fixed slots. Recording never throws into the game: anything that cannot be read becomes an `error` slot.
+
+### `hook.add` `{type, method, params?}`
+`type` is a full type name, `method` a method name on it (own methods first, then parents). With several overloads, `params` (parameter count) picks one; without it the error lists the candidates' parameter counts. → `{id, type, method, slot}`. Fails when all 16 slots are in use or the method is already hooked.
+
+### `hook.remove` `{id}`
+→ `{removed: true}`. Frees the slot.
+
+### `hook.list`
+→ `[{id, type, method, slot}]`
+
+### `hook.drain`
+Returns and clears the recorded calls, oldest first. The buffer keeps the last 512 calls; older ones are dropped. →
+`[{seq, t, id, type, method, args: [slot...], ret?: slot}]` where `t` is milliseconds since the plugin started and a slot is `{i?, type, value? | str? | h? + rtype + ptr | ptr? | error?}`.
+
+Argument convention (as implemented; REFramework's hook passes the raw native argument list): `args[i].i` is the argv index —
+- `0`: the thread context (recorded as `ptr`, type `ctx` unless the SDK reports one)
+- `1`: `this` for instance methods (recorded as an object: `ptr`, runtime `rtype`, and a handle `h`); for static methods the slot is recorded as `ptr` with type `this(static)`
+- `2..`: the declared parameters in order
+
+`type` is the type REFramework reports in `arg_tys[i]`, falling back to the declared parameter type (or the declaring type for `this`) when it reports none. Values: primitives and enums are read inline from the slot (`value`); `System.String` is decoded (`str`, capped at 256 characters, `null` for a null reference); other references are recorded as `ptr` plus, when the pointer looks like a live managed object, its runtime type `rtype` and a handle `h` that `object.describe` / `field.get` accept (the object is referenced for the life of the handle). Anything else (inline value types, unknown types) is `ptr`: the raw 8-byte slot. `ret` is the return value recorded the same way by the post hook (absent for `void`); it is paired with the newest unfinished call of the same hook on the same thread.
+
 ## Safety
 
 - Binds `127.0.0.1` only.

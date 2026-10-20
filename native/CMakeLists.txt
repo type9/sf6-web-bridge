@@ -10,7 +10,7 @@ cmake_minimum_required(VERSION 3.21)
 cmake_policy(SET CMP0091 NEW)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-project(sf6-web-bridge LANGUAGES C CXX VERSION 0.1.6)
+project(sf6-web-bridge LANGUAGES C CXX VERSION 0.1.7)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -44,6 +44,7 @@ add_library(sf6-web-bridge SHARED
   src/server.cpp
   src/rpc.cpp
   src/values.cpp
+  src/trace.cpp
 )
 
 target_include_directories(sf6-web-bridge PRIVATE

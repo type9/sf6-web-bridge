@@ -9,6 +9,7 @@
 
 #include "handles.hpp"
 #include "server.hpp"
+#include "trace.hpp"
 
 namespace bridge {
 
@@ -57,8 +58,13 @@ private:
     nlohmann::json op_mem_peek(const nlohmann::json& p);
     nlohmann::json op_handle_release(const nlohmann::json& p);
     nlohmann::json op_training_summary();
+    nlohmann::json op_hook_add(const nlohmann::json& p);
+    nlohmann::json op_hook_remove(const nlohmann::json& p);
+    nlohmann::json op_hook_list();
+    nlohmann::json op_hook_drain();
 
     // helpers
+    nlohmann::json trace_slot(const trace::Slot& s);
     const Handle& need_handle(const nlohmann::json& p, const char* key = "h");
     reframework::API::TypeDefinition* type_of(const Handle& h) const;
     nlohmann::json ref(void* obj);

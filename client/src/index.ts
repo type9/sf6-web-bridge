@@ -68,6 +68,41 @@ export interface TrainingSummary {
 	recordSetting?: Ref | null
 }
 
+/** An installed method hook (`hook.add` / `hook.list`). */
+export interface HookInfo {
+	id: number
+	type: string
+	method: string
+	slot: number
+}
+
+/**
+ * One recorded argument or return value. Exactly one of `value`, `str`,
+ * `h` (+ `rtype`, `ptr`), `ptr` or `error` is present. For arguments `i`
+ * is the argv index: 0 = thread context, 1 = `this`, 2.. = parameters.
+ */
+export interface TraceSlot {
+	i?: number
+	type: string
+	value?: number | boolean | null
+	str?: string | null
+	h?: number
+	rtype?: string
+	ptr?: string
+	error?: string
+}
+
+export interface TraceCall {
+	seq: number
+	/** Milliseconds since the plugin started. */
+	t: number
+	id: number
+	type: string
+	method: string
+	args: TraceSlot[]
+	ret?: TraceSlot
+}
+
 export class BridgeError extends Error {
 	constructor(
 		message: string,
@@ -255,6 +290,26 @@ export class Sf6Bridge {
 
 	trainingSummary(): Promise<TrainingSummary> {
 		return this.request("training.summary")
+	}
+
+	// ── tracing (experimental) ───────────────────────────────────────
+
+	/** Experimental. Hook `type.method` so its calls are recorded; `params` picks an overload by parameter count. At most 16 hooks. */
+	hookAdd(type: string, method: string, params?: number): Promise<HookInfo> {
+		return this.request("hook.add", { type, method, ...(params !== undefined ? { params } : {}) })
+	}
+
+	hookRemove(id: number): Promise<{ removed: true }> {
+		return this.request("hook.remove", { id })
+	}
+
+	hookList(): Promise<HookInfo[]> {
+		return this.request("hook.list")
+	}
+
+	/** Returns and clears the recorded calls (oldest first, at most 512). Object arguments come back as handles. */
+	hookDrain(): Promise<TraceCall[]> {
+		return this.request("hook.drain")
 	}
 
 	/** Walk a dotted field path from a ref: `get(tm, "_tData.SelectMenu.PlayerDatas")`. */

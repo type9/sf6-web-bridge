@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -63,6 +64,7 @@ bool ends_with(const std::string& s, std::string_view suffix) {
 void Rpc::init(const std::string& data_dir) {
     m_data_dir = data_dir;
     m_code = make_code();
+    trace::tracer().init();
 
     // The code is also written next to the plugin's data so a launcher or
     // the player can read it without opening the log.
@@ -152,6 +154,10 @@ json Rpc::dispatch(const std::string& op, const json& p) {
     if (op == "mem.peek") return op_mem_peek(p);
     if (op == "handle.release") return op_handle_release(p);
     if (op == "training.summary") return op_training_summary();
+    if (op == "hook.add") return op_hook_add(p);
+    if (op == "hook.remove") return op_hook_remove(p);
+    if (op == "hook.list") return op_hook_list();
+    if (op == "hook.drain") return op_hook_drain();
     throw std::runtime_error("unknown op: " + op);
 }
 
@@ -738,6 +744,137 @@ json Rpc::op_training_summary() {
         out["recordSetting"] = rec;
     }
     out["trainingData"] = tdata;
+    return out;
+}
+
+// ── tracing (experimental) ───────────────────────────────────────────────
+
+/**
+ * EXPERIMENTAL. Hook a method by type + name so its calls get recorded
+ * while the player drives the game by hand. Overloads are picked by
+ * parameter count (`params`); with several overloads and no `params` the
+ * error lists the candidates. At most trace::MAX_SLOTS hooks at once.
+ */
+json Rpc::op_hook_add(const json& p) {
+    const auto type_name = need_string(p, "type");
+    const auto method_name = need_string(p, "method");
+    const auto t = API::get()->tdb()->find_type(type_name);
+    if (t == nullptr) {
+        throw std::runtime_error("type `" + type_name + "` not found");
+    }
+    std::vector<API::Method*> cands;
+    for (const auto m : t->get_methods()) {
+        if (m != nullptr && m->get_name() != nullptr && method_name == m->get_name()) {
+            cands.push_back(m);
+        }
+    }
+    if (cands.empty()) {
+        // get_methods is the type's own; find_method also walks parents.
+        if (const auto m = t->find_method(method_name); m != nullptr) {
+            cands.push_back(m);
+        }
+    }
+    if (cands.empty()) {
+        throw std::runtime_error("no method `" + method_name + "` on " + t->get_full_name());
+    }
+    if (const auto it = p.find("params"); it != p.end() && !it->is_null()) {
+        if (!it->is_number_unsigned()) {
+            throw std::runtime_error("`params` must be a non-negative integer");
+        }
+        const auto want = it->get<uint32_t>();
+        std::vector<API::Method*> matching;
+        for (const auto m : cands) {
+            if (m->get_num_params() == want) {
+                matching.push_back(m);
+            }
+        }
+        if (matching.empty()) {
+            throw std::runtime_error("no overload of `" + method_name + "` takes " + std::to_string(want) + " parameter(s)");
+        }
+        cands = std::move(matching);
+    }
+    if (cands.size() > 1) {
+        std::string counts;
+        for (const auto m : cands) {
+            if (!counts.empty()) {
+                counts += ", ";
+            }
+            counts += std::to_string(m->get_num_params());
+        }
+        throw std::runtime_error("`" + method_name + "` has " + std::to_string(cands.size()) +
+            " overloads; pass `params` (candidates take " + counts + " parameter(s))");
+    }
+    const auto added = trace::tracer().add(t, cands[0], t->get_full_name());
+    return json{{"id", added.id}, {"type", t->get_full_name()}, {"method", method_name}, {"slot", added.slot}};
+}
+
+json Rpc::op_hook_remove(const json& p) {
+    const auto it = p.find("id");
+    if (it == p.end() || !it->is_number_unsigned()) {
+        throw std::runtime_error("missing hook `id`");
+    }
+    trace::tracer().remove(it->get<uint32_t>());
+    return json{{"removed", true}};
+}
+
+json Rpc::op_hook_list() {
+    return trace::tracer().list();
+}
+
+/** A recorded slot → wire shape `{i?, type, value? | str? | h? | ptr? | error?}`. */
+json Rpc::trace_slot(const trace::Slot& s) {
+    json a = json::object();
+    if (s.i >= 0) {
+        a["i"] = s.i;
+    }
+    a["type"] = s.type;
+    char hexbuf[32];
+    std::snprintf(hexbuf, sizeof(hexbuf), "0x%llx", static_cast<unsigned long long>(s.ptr));
+    switch (s.what) {
+    case trace::Slot::What::Value:
+        a["value"] = s.value;
+        break;
+    case trace::Slot::What::Str:
+        a["str"] = s.value;
+        break;
+    case trace::Slot::What::Obj: {
+        // The hook took one reference to keep the object alive until now;
+        // the handle table takes its own, then the hook's is dropped.
+        a["ptr"] = hexbuf;
+        a["rtype"] = s.obj_type_name;
+        a["h"] = m_handles.put(s.obj, s.obj_type, true);
+        static_cast<API::ManagedObject*>(s.obj)->release();
+        break;
+    }
+    case trace::Slot::What::Ptr:
+        a["ptr"] = hexbuf;
+        break;
+    case trace::Slot::What::Err:
+        a["error"] = s.text;
+        break;
+    default:
+        break;
+    }
+    return a;
+}
+
+json Rpc::op_hook_drain() {
+    auto& tr = trace::tracer();
+    for (const auto o : tr.take_orphans()) {
+        static_cast<API::ManagedObject*>(o)->release();
+    }
+    auto out = json::array();
+    for (const auto& c : tr.drain()) {
+        auto args = json::array();
+        for (const auto& a : c.args) {
+            args.push_back(trace_slot(a));
+        }
+        json j{{"seq", c.seq}, {"t", c.t}, {"id", c.id}, {"type", c.type}, {"method", c.method}, {"args", args}};
+        if (c.ret) {
+            j["ret"] = trace_slot(*c.ret);
+        }
+        out.push_back(std::move(j));
+    }
     return out;
 }
 

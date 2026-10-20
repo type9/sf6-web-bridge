@@ -38,7 +38,8 @@ Goal: drive menus the player would otherwise click through.
 
 ## 4. Distribution
 
-- Signed releases with checksums, a one-page install guide with screenshots, an in-game ImGui panel showing the pairing code and connected sites.
+- **Code signing is a blocker, not a nicety.** Windows 11 Smart App Control (on by default on fresh installs) refuses unsigned DLLs with no cloud reputation; v0.1.5 was blocked on the operator's PC on 2026-10-19 (Code Integrity event 3077) while v0.1.4, which had earned reputation, still loaded. Plan: Azure Trusted Signing (individual identity validation, monthly fee) wired into the GitHub Actions release job, so every release is signed before it is published. Until then each release is a coin flip for Smart App Control users.
+- Checksums on releases, a one-page install guide with screenshots, an in-game ImGui panel showing the pairing code and connected sites.
 - npm publish of the client package once the API settles.
 
 ## Risks to keep in view

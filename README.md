@@ -31,6 +31,21 @@ Any site can open the socket; the pairing code is what gates it, and a site cann
 
 Every operation except `ping` requires the pairing code, so a page that is allowed to connect still cannot touch the game until you type the code into it.
 
+## Troubleshooting
+
+**`[PluginLoader] Failed to load ...sf6-web-bridge.dll` on every launch, no `[sf6-web-bridge]` lines.** On Windows 11 with Smart App Control enforcing, Code Integrity refuses unsigned DLLs that Microsoft's cloud has no reputation for, and every new release is a new hash with no reputation. Confirm with PowerShell:
+
+```powershell
+(Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy" -Name VerifiedAndReputablePolicyState).VerifiedAndReputablePolicyState
+Get-WinEvent -LogName "Microsoft-Windows-CodeIntegrity/Operational" -MaxEvents 10 | Select-Object TimeCreated, Id, Message | Format-List
+```
+
+A policy state of `1` plus event `3077` naming the DLL is the block. The fix is either turning Smart App Control off (Windows Security, App & browser control; Windows makes this one-way) or a release signed with a Microsoft-trusted certificate, which is on the roadmap. `LoadLibrary` reports this as error 203, which is misleading.
+
+**`Failed to load` once, loads on the next launch.** Defender's first-run cloud scan. Nothing to do.
+
+**`requires a newer minor version`.** The plugin was built against a newer REFramework API than the installed `dinput8.dll`. Update REFramework or use the plugin release that matches.
+
 ## Status
 
 Verified on 2026-10-19 against the Steam build with REFramework v1.5.9.1: the plugin loads, a browser reaches it from an https page, and Training Mode record slots can be read and written in place. The input mask and the object paths are in [docs/FINDINGS.md](docs/FINDINGS.md); what comes next is in [docs/ROADMAP.md](docs/ROADMAP.md).

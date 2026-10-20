@@ -47,7 +47,7 @@ Case-insensitive substring search over all type names (≥ 3 characters). → `{
 → value (see table).
 
 ### `field.set` `{h, name, value}`
-Primitives and enums → the value read back. Reference fields (experimental) accept `null` or `{h}` of a managed object; the new referent gets a reference added, the old one is left alone.
+Primitives and enums → the value read back. `System.String` fields (experimental) accept `null` or a string; a fresh managed string is created and referenced. Reference fields (experimental) accept `null` or `{h}` of a managed object; the new referent gets a reference added, the old one is left alone.
 
 ### `method.call` `{h, name, args?: []}`
 Arguments by position: numbers / booleans for primitives, strings for `System.String`, `null` or `{h}` for references and value types. → return value, `null` for `void`. Fails if the game throws.
@@ -63,6 +63,9 @@ Primitive element types only; never grows the array. → `{from, written, length
 
 ### `array.create` `{element, length}` — experimental
 Allocates a managed array through `System.Array.CreateInstance(Type, int)` and pins it for the process lifetime. → ref with `pinned: true`.
+
+### `object.create` `{type}` — experimental
+Instantiates a managed class by full name through REFramework's `create_instance` (parameterless constructor) and pins it for the process lifetime. Refuses value types and arrays. → ref with `pinned: true`. Meant for the small parameter objects the game's UI flows take.
 
 ### `mem.peek` `{h, size?: 64}`
 → `{bytes: "<hex>"}` of the handle's memory, up to 4096 bytes. For checking layouts.

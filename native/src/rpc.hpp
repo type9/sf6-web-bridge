@@ -53,6 +53,7 @@ private:
     nlohmann::json op_array_get(const nlohmann::json& p);
     nlohmann::json op_array_set(const nlohmann::json& p);
     nlohmann::json op_array_create(const nlohmann::json& p);
+    nlohmann::json op_object_create(const nlohmann::json& p);
     nlohmann::json op_mem_peek(const nlohmann::json& p);
     nlohmann::json op_handle_release(const nlohmann::json& p);
     nlohmann::json op_training_summary();

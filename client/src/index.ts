@@ -234,6 +234,16 @@ export class Sf6Bridge {
 		return this.request("array.set", { h: ref.h, from, values })
 	}
 
+	/** Experimental. Instantiate a managed class by full name (parameterless ctor); pinned for the process lifetime. */
+	createObject(type: string): Promise<Ref & { pinned: true }> {
+		return this.request("object.create", { type })
+	}
+
+	/** Experimental. Allocate a managed array of a primitive element type; pinned for the process lifetime. */
+	createArray(element: string, length: number): Promise<Ref & { pinned: true }> {
+		return this.request("array.create", { element, length })
+	}
+
 	/** Raw bytes at the handle, hex-encoded. For checking layouts, not for production reads. */
 	peek(ref: Ref, size = 64): Promise<{ bytes: string }> {
 		return this.request("mem.peek", { h: ref.h, size })

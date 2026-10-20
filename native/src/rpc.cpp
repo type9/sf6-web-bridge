@@ -148,6 +148,7 @@ json Rpc::dispatch(const std::string& op, const json& p) {
     if (op == "array.get") return op_array_get(p);
     if (op == "array.set") return op_array_set(p);
     if (op == "array.create") return op_array_create(p);
+    if (op == "object.create") return op_object_create(p);
     if (op == "mem.peek") return op_mem_peek(p);
     if (op == "handle.release") return op_handle_release(p);
     if (op == "training.summary") return op_training_summary();
@@ -451,6 +452,23 @@ json Rpc::op_field_set(const json& p) {
         }
         return values::read_at(ptr, k);
     }
+    if (k == Kind::String) {
+        // EXPERIMENTAL. Stores a fresh managed string (or null). The
+        // string gets a reference so the game can keep it.
+        void* next = nullptr;
+        if (!it->is_null()) {
+            if (!it->is_string()) {
+                throw std::runtime_error("`value` must be null or a string for a String field");
+            }
+            next = API::get()->sdk()->functions->create_managed_string(values::to_wide(it->get<std::string>()).c_str());
+            if (next == nullptr) {
+                throw std::runtime_error("create_managed_string failed");
+            }
+            static_cast<API::ManagedObject*>(next)->add_ref();
+        }
+        std::memcpy(ptr, &next, sizeof(next));
+        return *it;
+    }
     if (k == Kind::Object) {
         // EXPERIMENTAL. Stores a reference: null or a managed handle. The
         // new referent gets a reference added so the game can keep it;
@@ -471,7 +489,7 @@ json Rpc::op_field_set(const json& p) {
         std::memcpy(ptr, &next, sizeof(next));
         return it->is_null() ? json(nullptr) : *it;
     }
-    throw std::runtime_error("field.set writes primitives, enums and object references only");
+    throw std::runtime_error("field.set writes primitives, enums, strings and object references only");
 }
 
 /**
@@ -522,6 +540,36 @@ json Rpc::op_array_create(const json& p) {
     const auto arr = static_cast<API::ManagedObject*>(ret.ptr);
     arr->add_ref(); // pinned for the process lifetime
     auto out = ref(arr);
+    out["pinned"] = true;
+    return out;
+}
+
+/**
+ * EXPERIMENTAL. Instantiate a managed class by full type name through
+ * REFramework's create_instance (runs the parameterless constructor). The
+ * object is pinned with a reference for the life of the process so it can
+ * be handed to game methods and stored into game fields. Meant for the
+ * small parameter objects the game's UI flows take (e.g. a CFN FlowParam);
+ * refuse value types and arrays, which have their own ops.
+ */
+json Rpc::op_object_create(const json& p) {
+    const auto name = need_string(p, "type");
+    const auto t = API::get()->tdb()->find_type(name);
+    if (t == nullptr) {
+        throw std::runtime_error("type `" + name + "` not found");
+    }
+    if (t->is_valuetype()) {
+        throw std::runtime_error("`" + name + "` is a value type; use field.set on an owner instead");
+    }
+    if (ends_with(name, "[]")) {
+        throw std::runtime_error("use array.create for arrays");
+    }
+    const auto obj = t->create_instance(REFRAMEWORK_CREATE_INSTANCE_FLAGS_SIMPLIFY);
+    if (obj == nullptr) {
+        throw std::runtime_error("create_instance returned null for `" + name + "`");
+    }
+    obj->add_ref(); // pinned for the process lifetime
+    auto out = ref(obj);
     out["pinned"] = true;
     return out;
 }

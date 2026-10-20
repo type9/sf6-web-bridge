@@ -121,7 +121,7 @@ export function useSf6Bridge(opts: UseSf6BridgeOptions = {}): Sf6BridgeState {
 			setStatus("error")
 			setError(e instanceof Error ? e.message : String(e))
 		}
-	}, [url])
+	}, [url, opts.timeoutMs])
 
 	const pair = useCallback(
 		async (next: string) => {

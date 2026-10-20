@@ -142,8 +142,18 @@ double Tracer::now_ms() const {
 }
 
 Tracer::Added Tracer::add(API::TypeDefinition* t, API::Method* m, const std::string& type_name) {
-    std::lock_guard lock{m_mtx};
+    // REFramework's add_hook/remove_hook take the hooked function's
+    // access_mux exclusively, and every hook invocation on any thread
+    // holds it shared while it runs our trampoline, which takes m_mtx.
+    // Holding m_mtx across add_hook/remove_hook therefore deadlocks the
+    // game as soon as a hooked method fires on another thread (seen
+    // 2026-10-19: second trace session froze the game). So: reserve the
+    // slot under m_mtx, install the hook with m_mtx released, then
+    // publish the hook id.
     int free = -1;
+    uint32_t id = 0;
+    {
+        std::lock_guard lock{m_mtx};
     for (int i = 0; i < MAX_SLOTS; i++) {
         if (m_slots[i].used && m_slots[i].method == m) {
             throw std::runtime_error("already hooked as id " + std::to_string(m_slots[i].id));
@@ -155,34 +165,56 @@ Tracer::Added Tracer::add(API::TypeDefinition* t, API::Method* m, const std::str
     if (free < 0) {
         throw std::runtime_error("all " + std::to_string(MAX_SLOTS) + " hook slots are in use; hook.remove one first");
     }
-    auto& s = m_slots[free];
-    s = HookSlot{};
-    s.id = m_next_id++;
-    s.method = m;
-    s.is_static = m->is_static();
-    s.type_name = type_name;
-    s.method_name = m->get_name() != nullptr ? m->get_name() : "?";
-    s.declaring_type = m->get_declaring_type() != nullptr ? m->get_declaring_type() : t;
-    s.return_type = m->get_return_type();
-    for (const auto& prm : m->get_params()) {
-        s.param_types.push_back(reinterpret_cast<API::TypeDefinition*>(prm.t));
+        auto& s = m_slots[free];
+        s = HookSlot{};
+        s.id = m_next_id++;
+        id = s.id;
+        s.method = m;
+        s.is_static = m->is_static();
+        s.type_name = type_name;
+        s.method_name = m->get_name() != nullptr ? m->get_name() : "?";
+        s.declaring_type = m->get_declaring_type() != nullptr ? m->get_declaring_type() : t;
+        s.return_type = m->get_return_type();
+        for (const auto& prm : m->get_params()) {
+            s.param_types.push_back(reinterpret_cast<API::TypeDefinition*>(prm.t));
+        }
+        // Mark used before installing: the hook can fire as soon as add_hook returns.
+        s.used = true;
     }
-    // Mark used before installing: the hook can fire as soon as add_hook returns.
-    s.used = true;
-    s.hook_id = m->add_hook(PRE_TABLE[static_cast<size_t>(free)], POST_TABLE[static_cast<size_t>(free)], false);
-    return Added{s.id, free};
+    unsigned int hook_id = 0;
+    try {
+        hook_id = m->add_hook(PRE_TABLE[static_cast<size_t>(free)], POST_TABLE[static_cast<size_t>(free)], false);
+    } catch (...) {
+        std::lock_guard lock{m_mtx};
+        m_slots[free] = HookSlot{};
+        throw;
+    }
+    {
+        std::lock_guard lock{m_mtx};
+        m_slots[free].hook_id = hook_id;
+    }
+    return Added{id, free};
 }
 
 void Tracer::remove(uint32_t id) {
-    std::lock_guard lock{m_mtx};
-    for (auto& s : m_slots) {
-        if (s.used && s.id == id) {
-            s.method->remove_hook(s.hook_id);
-            s = HookSlot{};
-            return;
+    API::Method* method = nullptr;
+    unsigned int hook_id = 0;
+    {
+        std::lock_guard lock{m_mtx};
+        for (auto& s : m_slots) {
+            if (s.used && s.id == id) {
+                method = s.method;
+                hook_id = s.hook_id;
+                // Clear first so a hook firing during remove_hook is ignored.
+                s = HookSlot{};
+                break;
+            }
         }
     }
-    throw std::runtime_error("unknown hook id " + std::to_string(id));
+    if (method == nullptr) {
+        throw std::runtime_error("unknown hook id " + std::to_string(id));
+    }
+    method->remove_hook(hook_id); // m_mtx NOT held, see add()
 }
 
 json Tracer::list() {

@@ -6,9 +6,11 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <random>
 #include <stdexcept>
 
+#include "http.hpp"
 #include "values.hpp"
 
 namespace bridge {
@@ -25,6 +27,14 @@ constexpr size_t CODE_LENGTH = 6;
 constexpr size_t MAX_ARRAY_READ = 100000;
 constexpr size_t MAX_PEEK = 4096;
 constexpr size_t MAX_TYPE_SEARCH_RESULTS = 500;
+constexpr size_t MAX_HTTP_URL = 4096;
+constexpr size_t DEFAULT_HTTP_MAX_BYTES = 64u << 20;
+constexpr size_t MAX_HTTP_BYTES = 256u << 20;
+/** How much of a non-2xx body is quoted in the http.get error. */
+constexpr size_t HTTP_ERROR_QUOTE = 200;
+/** Managed array layout (FINDINGS "Managed array layout"): int32 length, then the elements. */
+constexpr size_t ARRAY_LENGTH_OFFSET = 0x1C;
+constexpr size_t ARRAY_DATA_OFFSET = 0x20;
 
 std::string make_code() {
     std::random_device rd;
@@ -55,6 +65,81 @@ std::string need_string(const json& p, const char* key) {
 
 bool ends_with(const std::string& s, std::string_view suffix) {
     return s.size() >= suffix.size() && s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+bool starts_with(const std::string& s, std::string_view prefix) {
+    return s.size() >= prefix.size() && s.compare(0, prefix.size(), prefix) == 0;
+}
+
+/** Optional `sig`: an array of parameter type full names. Null pointer when absent. */
+const json* sig_of(const json& p) {
+    const auto it = p.find("sig");
+    if (it == p.end() || it->is_null()) {
+        return nullptr;
+    }
+    if (!it->is_array()) {
+        throw std::runtime_error("`sig` must be an array of parameter type names");
+    }
+    for (const auto& s : *it) {
+        if (!s.is_string()) {
+            throw std::runtime_error("`sig` must be an array of parameter type names");
+        }
+    }
+    return &*it;
+}
+
+/** `Name(System.Int32, System.String)` — the shape `sig` matches against. */
+std::string signature_of(API::Method* m) {
+    std::string s = m->get_name() != nullptr ? m->get_name() : "?";
+    s += '(';
+    bool first = true;
+    for (const auto& prm : m->get_params()) {
+        if (!first) {
+            s += ", ";
+        }
+        first = false;
+        const auto pt = reinterpret_cast<API::TypeDefinition*>(prm.t);
+        s += pt != nullptr ? pt->get_full_name() : "?";
+    }
+    s += ')';
+    return s;
+}
+
+bool matches_sig(API::Method* m, const json& sig) {
+    const auto params = m->get_params();
+    if (params.size() != sig.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < params.size(); i++) {
+        const auto pt = reinterpret_cast<API::TypeDefinition*>(params[i].t);
+        if (pt == nullptr || pt->get_full_name() != sig[i].get_ref<const std::string&>()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::string list_signatures(const std::vector<API::Method*>& ms) {
+    std::string out;
+    for (const auto m : ms) {
+        if (!out.empty()) {
+            out += "; ";
+        }
+        out += signature_of(m);
+    }
+    return out;
+}
+
+/** The first `n` bytes as printable ASCII, so an error message stays valid JSON whatever the server sent. */
+std::string printable(const std::string& s, size_t n) {
+    std::string out;
+    const auto take = std::min(n, s.size());
+    out.reserve(take);
+    for (size_t i = 0; i < take; i++) {
+        const auto c = static_cast<unsigned char>(s[i]);
+        out.push_back(c >= 0x20 && c < 0x7f ? static_cast<char>(c) : '?');
+    }
+    return out;
 }
 
 } // namespace
@@ -142,6 +227,7 @@ json Rpc::dispatch(const std::string& op, const json& p) {
     if (op == "singletons.list") return op_singletons_list();
     if (op == "type.find") return op_type_find(p);
     if (op == "type.search") return op_type_search(p);
+    if (op == "type.object") return op_type_object(p);
     if (op == "object.describe") return op_object_describe(p);
     if (op == "field.get") return op_field_get(p);
     if (op == "field.set") return op_field_set(p);
@@ -153,6 +239,7 @@ json Rpc::dispatch(const std::string& op, const json& p) {
     if (op == "object.create") return op_object_create(p);
     if (op == "mem.peek") return op_mem_peek(p);
     if (op == "handle.release") return op_handle_release(p);
+    if (op == "http.get") return op_http_get(p);
     if (op == "training.summary") return op_training_summary();
     if (op == "hook.add") return op_hook_add(p);
     if (op == "hook.remove") return op_hook_remove(p);
@@ -237,17 +324,105 @@ json Rpc::field_get(const Handle& h, const std::string& name) {
     return read_slot(p, f->get_type());
 }
 
-reframework::InvokeRet Rpc::invoke(const Handle& h, const std::string& method, const json& args, API::Method** out_method) {
+/**
+ * Every overload named `name` on `t` and its parents, most derived first;
+ * an override hides the parent method with the same signature. Falls back
+ * to REFramework's find_method when the walk finds nothing. Cached per
+ * (type, name): array.get resolves `Get` once per element otherwise.
+ */
+const std::vector<API::Method*>& Rpc::overloads(API::TypeDefinition* t, const std::string& name) {
+    const auto key = std::make_pair(t, name);
+    if (const auto it = m_overloads.find(key); it != m_overloads.end()) {
+        return it->second;
+    }
+    std::vector<API::Method*> found;
+    int depth = 0;
+    for (auto cur = t; cur != nullptr && depth < 64; cur = cur->get_parent_type(), depth++) {
+        if (cur->get_num_methods() == 0) {
+            continue;
+        }
+        for (const auto m : cur->get_methods()) {
+            if (m != nullptr && m->get_name() != nullptr && name == m->get_name()) {
+                found.push_back(m);
+            }
+        }
+    }
+    std::vector<API::Method*> out;
+    if (found.size() > 1) {
+        std::vector<std::string> seen;
+        for (const auto m : found) {
+            const auto sig = signature_of(m);
+            if (std::find(seen.begin(), seen.end(), sig) == seen.end()) {
+                seen.push_back(sig);
+                out.push_back(m);
+            }
+        }
+    } else {
+        out = std::move(found);
+    }
+    if (out.empty()) {
+        if (const auto m = t->find_method(name); m != nullptr) {
+            out.push_back(m);
+        }
+    }
+    return m_overloads.emplace(key, std::move(out)).first->second;
+}
+
+/**
+ * Pick one overload of `name` on `t`. `nargs` (when set) filters by
+ * parameter count, `sig` (when set) by the exact parameter type names in
+ * order. Several survivors is an error that lists their signatures so the
+ * caller can pass `sig`.
+ */
+API::Method* Rpc::select_method(API::TypeDefinition* t, const std::string& name, std::optional<size_t> nargs, const json* sig) {
+    const auto& all = overloads(t, name);
+    if (all.empty()) {
+        throw std::runtime_error("no method `" + name + "` on " + t->get_full_name());
+    }
+    std::vector<API::Method*> cands;
+    for (const auto m : all) {
+        if (nargs.has_value() && m->get_num_params() != *nargs) {
+            continue;
+        }
+        if (sig != nullptr && !matches_sig(m, *sig)) {
+            continue;
+        }
+        cands.push_back(m);
+    }
+    if (cands.empty()) {
+        if (sig != nullptr) {
+            std::string want;
+            for (const auto& s : *sig) {
+                if (!want.empty()) {
+                    want += ", ";
+                }
+                want += s.get_ref<const std::string&>();
+            }
+            throw std::runtime_error("no overload of `" + name + "` on " + t->get_full_name() + " has signature (" + want +
+                "); candidates: " + list_signatures(all));
+        }
+        if (all.size() == 1) {
+            throw std::runtime_error("`" + name + "` takes " + std::to_string(all[0]->get_num_params()) + " argument(s), got " +
+                std::to_string(nargs.value_or(0)));
+        }
+        throw std::runtime_error("no overload of `" + name + "` on " + t->get_full_name() + " takes " +
+            std::to_string(nargs.value_or(0)) + " argument(s); candidates: " + list_signatures(all));
+    }
+    if (cands.size() > 1) {
+        throw std::runtime_error("`" + name + "` on " + t->get_full_name() + " has " + std::to_string(cands.size()) +
+            " matching overloads; pass `sig` (parameter type names) to pick one: " + list_signatures(cands));
+    }
+    return cands[0];
+}
+
+reframework::InvokeRet Rpc::invoke(const Handle& h, const std::string& method, const json& args, API::Method** out_method, const json* sig) {
     const auto t = type_of(h);
     if (t == nullptr) {
         throw std::runtime_error("handle has no type");
     }
-    const auto m = t->find_method(method);
-    if (m == nullptr) {
-        throw std::runtime_error("no method `" + method + "` on " + t->get_full_name());
-    }
-    const auto params = m->get_params();
     const auto arg_list = args.is_array() ? args : json::array();
+    const auto m = select_method(t, method, arg_list.size(), sig);
+    const auto params = m->get_params();
     if (params.size() != arg_list.size()) {
         throw std::runtime_error("`" + method + "` takes " + std::to_string(params.size()) + " argument(s), got " +
             std::to_string(arg_list.size()));
@@ -384,6 +559,29 @@ json Rpc::op_type_search(const json& p) {
     return json{{"q", needle}, {"scanned", n}, {"truncated", out.size() >= MAX_TYPE_SEARCH_RESULTS}, {"types", out}};
 }
 
+/**
+ * The runtime `System.Type` object for a type, which is what methods
+ * taking a `Type` want (e.g. the first argument of
+ * `System.Delegate.CreateDelegate(Type, object, string)`). The object is
+ * owned by the runtime for the process lifetime; it is referenced like any
+ * other handle anyway.
+ */
+json Rpc::op_type_object(const json& p) {
+    const auto name = need_string(p, "name");
+    const auto t = API::get()->tdb()->find_type(name);
+    if (t == nullptr) {
+        throw std::runtime_error("type `" + name + "` not found");
+    }
+    const auto rt = t->get_runtime_type();
+    if (rt == nullptr) {
+        throw std::runtime_error("`" + name + "` has no runtime type object");
+    }
+    rt->add_ref();
+    auto out = ref(rt);
+    out["of"] = t->get_full_name();
+    return out;
+}
+
 json Rpc::op_object_describe(const json& p) {
     const auto& h = need_handle(p);
     const auto t = type_of(h);
@@ -505,16 +703,11 @@ json Rpc::op_field_set(const json& p) {
  * field and survive the client's handle being released. Plugin API 1.10
  * has no create_managed_array, hence this route.
  */
-json Rpc::op_array_create(const json& p) {
-    const auto elem = need_string(p, "element");
-    const auto length = p.value("length", 0);
-    if (length <= 0 || length > (1 << 20)) {
-        throw std::runtime_error("`length` must be 1..1048576");
-    }
+API::ManagedObject* Rpc::create_array(const std::string& element, int32_t length) {
     const auto& api = API::get();
-    const auto type_obj = api->sdk()->functions->typeof_(elem.c_str());
+    const auto type_obj = api->sdk()->functions->typeof_(element.c_str());
     if (type_obj == nullptr) {
-        throw std::runtime_error("typeof(" + elem + ") failed");
+        throw std::runtime_error("typeof(" + element + ") failed");
     }
     const auto array_t = api->tdb()->find_type("System.Array");
     if (array_t == nullptr) {
@@ -545,8 +738,60 @@ json Rpc::op_array_create(const json& p) {
     }
     const auto arr = static_cast<API::ManagedObject*>(ret.ptr);
     arr->add_ref(); // pinned for the process lifetime
+    return arr;
+}
+
+json Rpc::op_array_create(const json& p) {
+    const auto elem = need_string(p, "element");
+    const auto length = p.value("length", 0);
+    if (length <= 0 || length > (1 << 20)) {
+        throw std::runtime_error("`length` must be 1..1048576");
+    }
+    auto out = ref(create_array(elem, length));
+    out["pinned"] = true;
+    return out;
+}
+
+/**
+ * EXPERIMENTAL. Download a URL into a managed `System.Byte[]`, for feeding
+ * game methods that take a byte array (e.g. a replay blob). The fetch runs
+ * on the game thread, so the game is frozen for the whole download; keep
+ * the files small or expect a stall. The array is pinned like array.create.
+ */
+json Rpc::op_http_get(const json& p) {
+    const auto url = need_string(p, "url");
+    if (url.size() > MAX_HTTP_URL) {
+        throw std::runtime_error("`url` longer than " + std::to_string(MAX_HTTP_URL) + " characters");
+    }
+    if (!starts_with(url, "http://") && !starts_with(url, "https://")) {
+        throw std::runtime_error("`url` must start with http:// or https://");
+    }
+    const auto max_bytes = p.value("maxBytes", static_cast<int64_t>(DEFAULT_HTTP_MAX_BYTES));
+    if (max_bytes <= 0 || max_bytes > static_cast<int64_t>(MAX_HTTP_BYTES)) {
+        throw std::runtime_error("`maxBytes` must be 1.." + std::to_string(MAX_HTTP_BYTES));
+    }
+    const auto res = http::get(url, static_cast<size_t>(max_bytes));
+    if (res.status < 200 || res.status >= 300) {
+        throw std::runtime_error("HTTP " + std::to_string(res.status) + ": " + printable(res.body, HTTP_ERROR_QUOTE));
+    }
+    const auto length = static_cast<int32_t>(res.body.size());
+    const auto arr = create_array("System.Byte", length);
+    const auto base = reinterpret_cast<uint8_t*>(arr);
+    int32_t stored = 0;
+    std::memcpy(&stored, base + ARRAY_LENGTH_OFFSET, sizeof(stored));
+    const auto at = arr->get_type_definition();
+    const auto at_name = at != nullptr ? at->get_full_name() : std::string{"?"};
+    if (stored != length || at_name != "System.Byte[]") {
+        throw std::runtime_error("unexpected array layout: " + at_name + " reports length " + std::to_string(stored) +
+            " for " + std::to_string(length) + " bytes");
+    }
+    if (length > 0) {
+        std::memcpy(base + ARRAY_DATA_OFFSET, res.body.data(), res.body.size());
+    }
     auto out = ref(arr);
     out["pinned"] = true;
+    out["length"] = length;
+    out["status"] = res.status;
     return out;
 }
 
@@ -584,7 +829,7 @@ json Rpc::op_method_call(const json& p) {
     const auto& h = need_handle(p);
     const auto name = need_string(p, "name");
     API::Method* m{};
-    const auto ret = invoke(h, name, p.value("args", json::array()), &m);
+    const auto ret = invoke(h, name, p.value("args", json::array()), &m, sig_of(p));
     const auto rt = m->get_return_type();
     const auto k = values::kind_of(rt);
     if (k == Kind::Void) {
@@ -752,8 +997,9 @@ json Rpc::op_training_summary() {
 /**
  * EXPERIMENTAL. Hook a method by type + name so its calls get recorded
  * while the player drives the game by hand. Overloads are picked by
- * parameter count (`params`); with several overloads and no `params` the
- * error lists the candidates. At most trace::MAX_SLOTS hooks at once.
+ * parameter count (`params`) and/or parameter type names (`sig`); with
+ * several candidates left the error lists their signatures. At most
+ * trace::MAX_SLOTS hooks at once.
  */
 json Rpc::op_hook_add(const json& p) {
     const auto type_name = need_string(p, "type");
@@ -762,49 +1008,15 @@ json Rpc::op_hook_add(const json& p) {
     if (t == nullptr) {
         throw std::runtime_error("type `" + type_name + "` not found");
     }
-    std::vector<API::Method*> cands;
-    for (const auto m : t->get_methods()) {
-        if (m != nullptr && m->get_name() != nullptr && method_name == m->get_name()) {
-            cands.push_back(m);
-        }
-    }
-    if (cands.empty()) {
-        // get_methods is the type's own; find_method also walks parents.
-        if (const auto m = t->find_method(method_name); m != nullptr) {
-            cands.push_back(m);
-        }
-    }
-    if (cands.empty()) {
-        throw std::runtime_error("no method `" + method_name + "` on " + t->get_full_name());
-    }
+    std::optional<size_t> nparams;
     if (const auto it = p.find("params"); it != p.end() && !it->is_null()) {
         if (!it->is_number_unsigned()) {
             throw std::runtime_error("`params` must be a non-negative integer");
         }
-        const auto want = it->get<uint32_t>();
-        std::vector<API::Method*> matching;
-        for (const auto m : cands) {
-            if (m->get_num_params() == want) {
-                matching.push_back(m);
-            }
-        }
-        if (matching.empty()) {
-            throw std::runtime_error("no overload of `" + method_name + "` takes " + std::to_string(want) + " parameter(s)");
-        }
-        cands = std::move(matching);
+        nparams = it->get<size_t>();
     }
-    if (cands.size() > 1) {
-        std::string counts;
-        for (const auto m : cands) {
-            if (!counts.empty()) {
-                counts += ", ";
-            }
-            counts += std::to_string(m->get_num_params());
-        }
-        throw std::runtime_error("`" + method_name + "` has " + std::to_string(cands.size()) +
-            " overloads; pass `params` (candidates take " + counts + " parameter(s))");
-    }
-    const auto added = trace::tracer().add(t, cands[0], t->get_full_name());
+    const auto m = select_method(t, method_name, nparams, sig_of(p));
+    const auto added = trace::tracer().add(t, m, t->get_full_name());
     return json{{"id", added.id}, {"type", t->get_full_name()}, {"method", method_name}, {"slot", added.slot}};
 }
 

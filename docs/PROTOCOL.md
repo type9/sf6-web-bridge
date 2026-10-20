@@ -37,6 +37,9 @@ Managed singleton by full type name, e.g. `app.training.TrainingManager`. → re
 ### `type.find` `{name}`
 → `{h, type, static: true}` or `null`. A type-only handle: `field.get` / `method.call` work for static members.
 
+### `type.object` `{name}`
+The runtime `System.Type` object for a type (REFramework's `get_runtime_type`). → ref plus `of: "<full name>"`. Errors when the type is unknown or has no runtime type object. This is the `Type` argument methods such as `System.Delegate.CreateDelegate(Type, object, string)` want; `type.find` handles are plugin-side and cannot be passed to the game.
+
 ### `type.search` `{q}`
 Case-insensitive substring search over all type names (≥ 3 characters). → `{q, scanned, truncated, types: [...]}`, capped at 500 names. Slow-ish on first use (the whole type database is walked).
 
@@ -49,8 +52,10 @@ Case-insensitive substring search over all type names (≥ 3 characters). → `{
 ### `field.set` `{h, name, value}`
 Primitives and enums → the value read back. `System.String` fields (experimental) accept `null` or a string; a fresh managed string is created and referenced. Reference fields (experimental) accept `null` or `{h}` of a managed object; the new referent gets a reference added, the old one is left alone.
 
-### `method.call` `{h, name, args?: []}`
+### `method.call` `{h, name, args?: [], sig?: [...]}`
 Arguments by position: numbers / booleans for primitives, strings for `System.String`, `null` or `{h}` for references and value types. → return value, `null` for `void`. Fails if the game throws.
+
+The method is looked up by name on the handle's type and its parents (an override hides the parent method with the same signature), then narrowed to the overloads taking `args.length` parameters. `sig` — the parameter type full names in order, e.g. `["System.Type", "System.Object", "System.String"]` — picks one overload exactly. Without `sig`, a name + count that still matches several overloads is an error listing each candidate as `Name(T1, T2)` so the caller can pass `sig`.
 
 ### `array.len` `{h}`
 → `{array, element, length}`
@@ -67,6 +72,11 @@ Allocates a managed array through `System.Array.CreateInstance(Type, int)` and p
 ### `object.create` `{type}` — experimental
 Instantiates a managed class by full name through REFramework's `create_instance` (parameterless constructor) and pins it for the process lifetime. Refuses value types and arrays. → ref with `pinned: true`. Meant for the small parameter objects the game's UI flows take.
 
+### `http.get` `{url, maxBytes?: 67108864}` — experimental
+Downloads `url` (http or https only, at most 4096 characters; redirects followed, never https → http) through WinHTTP into a fresh managed `System.Byte[]` of the body's length, pinned for the process lifetime like `array.create`. → ref plus `{pinned: true, length, status}` where `status` is the HTTP status code. A non-2xx status is an error `HTTP <status>: <first 200 bytes of the body as text>`; a 2xx body larger than `maxBytes` (cap 256 MiB) is an error without allocating.
+
+**The download runs on the game thread**, so the game is frozen until it finishes or a 60 s WinHTTP phase timeout fires (resolve, connect, send, receive). Keep the files small (a replay blob, not a video); the client waits 120 s for this op instead of the usual 5 s.
+
 ### `mem.peek` `{h, size?: 64}`
 → `{bytes: "<hex>"}` of the handle's memory, up to 4096 bytes. For checking layouts.
 
@@ -80,8 +90,8 @@ Convenience walk of `app.training.TrainingManager._tData`. → `{inTraining, p1F
 
 A method-call tracer for watching which game methods run, with which arguments, while the player drives a menu flow by hand. Hooks are installed through REFramework's `add_hook` (pre + post) on one of 16 fixed slots. Recording never throws into the game: anything that cannot be read becomes an `error` slot.
 
-### `hook.add` `{type, method, params?}`
-`type` is a full type name, `method` a method name on it (own methods first, then parents). With several overloads, `params` (parameter count) picks one; without it the error lists the candidates' parameter counts. → `{id, type, method, slot}`. Fails when all 16 slots are in use or the method is already hooked.
+### `hook.add` `{type, method, params?, sig?}`
+`type` is a full type name, `method` a method name on it (own methods and parents', an override hiding the parent's same-signature method). With several overloads, `params` (parameter count) and/or `sig` (parameter type full names in order, as for `method.call`) pick one; when several candidates remain the error lists their signatures. → `{id, type, method, slot}`. Fails when all 16 slots are in use or the method is already hooked.
 
 ### `hook.remove` `{id}`
 → `{removed: true}`. Frees the slot.
@@ -106,3 +116,4 @@ Argument convention (as implemented; REFramework's hook passes the raw native ar
 - Browser connections must send an allowed `Origin`; connections with no `Origin` (command-line tools) are accepted.
 - Nothing but `ping` works before `hello` with the pairing code, which changes every launch.
 - Writes: primitive fields and array elements, plus (experimental) reference fields and array allocation. No native-pointer writes.
+- `http.get` makes the game process fetch an http(s) URL the paired page chose; the body only ever lands in a managed byte array the page then hands to game methods itself.

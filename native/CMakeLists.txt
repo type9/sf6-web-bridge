@@ -10,7 +10,7 @@ cmake_minimum_required(VERSION 3.21)
 cmake_policy(SET CMP0091 NEW)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-project(sf6-web-bridge LANGUAGES C CXX VERSION 0.1.9)
+project(sf6-web-bridge LANGUAGES C CXX VERSION 0.1.10)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -45,6 +45,7 @@ add_library(sf6-web-bridge SHARED
   src/rpc.cpp
   src/values.cpp
   src/trace.cpp
+  src/http.cpp
 )
 
 target_include_directories(sf6-web-bridge PRIVATE
@@ -52,9 +53,12 @@ target_include_directories(sf6-web-bridge PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
+# winhttp: `http.get` downloads through the Windows SDK's WinHTTP (HTTPS
+# without bundling a TLS library).
 target_link_libraries(sf6-web-bridge PRIVATE
   ixwebsocket::ixwebsocket
   nlohmann_json::nlohmann_json
+  winhttp
 )
 
 target_compile_definitions(sf6-web-bridge PRIVATE

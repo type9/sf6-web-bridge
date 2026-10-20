@@ -10,5 +10,8 @@ export const PROTOCOL_VERSION = 1
 /** Default request timeout. The game thread answers within a frame when it is running. */
 export const DEFAULT_TIMEOUT_MS = 5000
 
+/** `http.get` downloads on the game thread with 60 s WinHTTP phase timeouts; the client waits longer than the default. */
+export const HTTP_GET_TIMEOUT_MS = 120_000
+
 /** Where the plugin writes the pairing code, relative to the game folder. */
 export const PAIRING_FILE = "reframework/data/sf6-web-bridge/pairing.txt"

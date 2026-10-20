@@ -1,11 +1,12 @@
 import {
 	DEFAULT_TIMEOUT_MS,
 	DEFAULT_URL,
+	HTTP_GET_TIMEOUT_MS,
 	PAIRING_FILE,
 	PROTOCOL_VERSION,
 } from "./constants"
 
-export { DEFAULT_PORT, DEFAULT_URL, PAIRING_FILE, PROTOCOL_VERSION } from "./constants"
+export { DEFAULT_PORT, DEFAULT_URL, HTTP_GET_TIMEOUT_MS, PAIRING_FILE, PROTOCOL_VERSION } from "./constants"
 export { INPUT_BITS, decodeInputMask, encodeInputMask, runLengths, expandRunLengths, type InputName } from "./input-mask"
 export { runSmoke, smokeTable, type SmokeRow, type SmokeOptions } from "./smoke"
 
@@ -66,6 +67,13 @@ export interface TrainingSummary {
 	recordFighterCount: number | null | { error: string }
 	trainingData?: Ref | null
 	recordSetting?: Ref | null
+}
+
+/** Result of `http.get`: a pinned managed `System.Byte[]` plus the HTTP status. */
+export interface HttpGetResult extends Ref {
+	pinned: true
+	length: number
+	status: number
 }
 
 /** An installed method hook (`hook.add` / `hook.list`). */
@@ -174,14 +182,14 @@ export class Sf6Bridge {
 		return this.ws.readyState === WebSocket.OPEN
 	}
 
-	/** Raw op. Prefer the typed wrappers below. */
-	request<T = unknown>(op: string, params: Record<string, unknown> = {}): Promise<T> {
+	/** Raw op. Prefer the typed wrappers below. `timeoutMs` overrides the connection default for one request. */
+	request<T = unknown>(op: string, params: Record<string, unknown> = {}, timeoutMs = this.timeoutMs): Promise<T> {
 		const id = this.next++
 		return new Promise<T>((resolve, reject) => {
 			const timer = setTimeout(() => {
 				this.pending.delete(id)
-				reject(new BridgeError(`timed out after ${this.timeoutMs} ms`, op))
-			}, this.timeoutMs)
+				reject(new BridgeError(`timed out after ${timeoutMs} ms`, op))
+			}, timeoutMs)
 			this.pending.set(id, { op, resolve: resolve as (v: unknown) => void, reject, timer })
 			this.ws.send(JSON.stringify({ id, op, ...params }))
 		})
@@ -234,6 +242,11 @@ export class Sf6Bridge {
 		return this.request("type.find", { name })
 	}
 
+	/** The runtime `System.Type` object for a type name: what `System.Delegate.CreateDelegate(Type, object, string)` and friends take. */
+	typeObject(name: string): Promise<Ref & { of: string }> {
+		return this.request("type.object", { name })
+	}
+
 	/** Substring search over every type name in the game (≥ 3 chars); capped at 500. */
 	searchTypes(q: string): Promise<{ q: string; scanned: number; truncated: boolean; types: string[] }> {
 		return this.request("type.search", { q })
@@ -253,8 +266,13 @@ export class Sf6Bridge {
 		return this.request("field.set", { h: ref.h, name, value: isRef(value) ? { h: value.h } : value })
 	}
 
-	call(ref: Ref, name: string, args: Array<number | boolean | string | Ref | null> = []): Promise<Value> {
-		return this.request("method.call", { h: ref.h, name, args })
+	/**
+	 * Call a method by name. With overloads, `opts.sig` (parameter type full
+	 * names in order, e.g. `["System.Type", "System.Object", "System.String"]`)
+	 * picks one; without it an ambiguous call fails listing the candidates.
+	 */
+	call(ref: Ref, name: string, args: Array<number | boolean | string | Ref | null> = [], opts: { sig?: string[] } = {}): Promise<Value> {
+		return this.request("method.call", { h: ref.h, name, args, ...(opts.sig ? { sig: opts.sig } : {}) })
 	}
 
 	arrayLen(ref: Ref): Promise<ArrayInfo> {
@@ -280,6 +298,16 @@ export class Sf6Bridge {
 		return this.request("array.create", { element, length })
 	}
 
+	/**
+	 * Experimental. Download an http(s) URL into a pinned managed `System.Byte[]`
+	 * (plugin ≥ 0.1.10). The plugin fetches on the game thread, so the game
+	 * freezes for the whole download; the request waits `HTTP_GET_TIMEOUT_MS`.
+	 * Non-2xx statuses reject with the status and the start of the body.
+	 */
+	httpGet(url: string, maxBytes?: number, timeoutMs = HTTP_GET_TIMEOUT_MS): Promise<HttpGetResult> {
+		return this.request("http.get", { url, ...(maxBytes !== undefined ? { maxBytes } : {}) }, timeoutMs)
+	}
+
 	/** Raw bytes at the handle, hex-encoded. For checking layouts, not for production reads. */
 	peek(ref: Ref, size = 64): Promise<{ bytes: string }> {
 		return this.request("mem.peek", { h: ref.h, size })
@@ -295,9 +323,14 @@ export class Sf6Bridge {
 
 	// ── tracing (experimental) ───────────────────────────────────────
 
-	/** Experimental. Hook `type.method` so its calls are recorded; `params` picks an overload by parameter count. At most 16 hooks. */
-	hookAdd(type: string, method: string, params?: number): Promise<HookInfo> {
-		return this.request("hook.add", { type, method, ...(params !== undefined ? { params } : {}) })
+	/** Experimental. Hook `type.method` so its calls are recorded; `params` (parameter count) and/or `sig` (parameter type names) pick an overload. At most 16 hooks. */
+	hookAdd(type: string, method: string, params?: number, sig?: string[]): Promise<HookInfo> {
+		return this.request("hook.add", {
+			type,
+			method,
+			...(params !== undefined ? { params } : {}),
+			...(sig ? { sig } : {}),
+		})
 	}
 
 	hookRemove(id: number): Promise<{ removed: true }> {

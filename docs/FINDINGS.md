@@ -196,9 +196,24 @@ Menu-flow wrappers located by `type.search` (2026-10-19, dumps `type-search-*.md
 
 Described 2026-10-19 (`ui-flow-wrappers.md`): each `Call*ApiFlow` is an `app.UIFlowAPI`1<Owner.FlowParam>` with a parameterless constructor and `OnCallApi()` / `OnApiCancel()` / `OnExit()`; the code itself must come from the `FlowParam` the base class holds. The owners expose a static entry point: `app.UICFNReplaySearchResult.Start(FlowParam) → app.IUIFlowHandle` (statics `DefaultSortType`, `SEARCH_RESULT_MAX`) and `app.UICFNFightersListTabSearchChildIdSearch.Start(FlowParam) → app.UIFlowCFNCommon.ChildTabFlowData`. So the candidate call path is: create a `FlowParam`, fill the code field, call the static `Start`. That needs object creation over RPC (not in the plugin yet) and the `FlowParam` shapes (not yet described). `ReplaySearchIdRoute` is EReplayMenu 1, EProfile 2, ERanking 3, EFightersList 4. The follow wrapper only exists as closed generics (e.g. `CallFollowApiFlow`1<app.UICFNReplayInfo.FlowParam>`, `…<app.UIFlowCFNCommon.StandaloneCFNDetailExecParam>`); the open generic is not findable by name.
 
+### Replay by code: the game's own path (read 2026-10-19; dump `ui-flow-replay-by-code.md`)
+
+In-game the player does: Replay › Search › Replay ID → types the code → result list → selects one (popup) → Watch Replay. The classes behind each step:
+
+| step | class / method |
+|---|---|
+| ID entry dialog | `app.UICFNReplayTopTabSearchChildSearchId.InputSearchIdWindowFlow : app.UIFlow`1<ChildSearchId.FlowParam>` with `OnEnter()`, `OnExit()`, **`OnResultCallback(System.String searchId)`** — the dialog hands the typed code to this instance method |
+| search | `ChildSearchId.CallSearchReplayIdApiFlow : app.UIFlowAPI`1<ChildSearchId.FlowParam>` (`OnCallApi()`); the param `ChildSearchId.FlowParam` holds `SearchReplayId: String`, `SearchShortId: UInt32`, `SearchFighterId: String`, `SearchItemList: List<SearchItem>`, `SearchResultList: List<CommonReplayInfo>`, `TopTemporaryData`; `SearchItem` is FIGHTER_ID 0, SHORT_ID 1, REPLAY_ID 2 |
+| shared state | `app.UICFNReplayTop.TopTemporaryData` keeps the last request bodies (`PostSearchReplayId: PostReplaySearchReplayIdIn` etc.), `CurrentTab`, `CurrentSearchTab`, `CurrentSearchIdItem` |
+| result list | `app.UICFNReplaySearchResult.Start(FlowParam) → IUIFlowHandle`; `FlowParam(List<CommonReplayInfo> data, TopTemporaryData, bool isRestore)`; `CallSearchResultType` is only paging (NONE 0, SORT 1, PAGE_PREV 2, PAGE_NEXT 3) |
+| popup | `app.UICFNReplayInfo.Start(FlowParam) → IUIFlowHandle`; `FlowParam(CommonReplayInfo data, bool isAllView, bool isResultDisp, bool isReplayViewEnable, Action replayViewEvent)`, field `_SharingData: CommonReplayInfo`; `MenuType` REPLAY 0, COMMENTATOR 1, REGIST 2, UNREGIST 3, PROFILE1 4, PROFILE2 5, SEARCH1 6, SEARCH2 7, RESULT_LIST 8; `FlowParamBase.MenuDecideEvent(UIFlowBase flow, MenuType)` |
+| watch | `app.UIFlowCFNCommon.CallReplayDownloadUrlApiFlow`1<UICFNReplayTopTabListBase.FlowParamBase>` (`OnCallApi()`) → `app.BattleReplayDataManager.AddReplayData(BattleReplayData, replayId, CommonReplayInfo, isRivalAi, ReplayPlaybackClientTab)` |
+
+Every flow step is a parameterless object whose state comes from the flow machinery, so the clean trigger is the dialog's own callback: with the player on the Replay ID search item, call `OnResultCallback(code)` on the live `InputSearchIdWindowFlow` instance and the game continues exactly as if the code had been typed. The live instance is captured with the tracer (plugin ≥ 0.1.7, `hook.add` on `InputSearchIdWindowFlow.OnEnter`; `this` comes back as a handle). The dev page's Trace panel does this and fires the callback. Not yet exercised.
+
 ### Type dumps
 
-`docs/dumps/2026-10-19-tdb71/` also holds `type-search-{replaysearch,shortid,follow,battlereplay}.md`, `network-api-shapes.md`, `battle-objects.md`, `battle-cplayer.md`, `ui-flow-wrappers.md`, `training-enums.md` (all 2026-10-19).
+`docs/dumps/2026-10-19-tdb71/ui-flow-replay-by-code.md` holds the replay-by-code UI classes. `docs/dumps/2026-10-19-tdb71/` also holds `type-search-{replaysearch,shortid,follow,battlereplay}.md`, `network-api-shapes.md`, `battle-objects.md`, `battle-cplayer.md`, `ui-flow-wrappers.md`, `training-enums.md` (all 2026-10-19).
 
 `docs/dumps/2026-10-19-tdb71/training-types.md` holds `object.describe` for TrainingData, TM_RecordSetting, its FighterData list, FighterData, SlotData and RecordData. Points of interest from it:
 

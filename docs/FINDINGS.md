@@ -108,7 +108,7 @@ All under `app.training.TrainingManager._tData`. Each line is the field that mov
 | Throw Escape | `DefenseSystem.DummyData.GD_Type` | `app.training.TM_COMMON_TYPE` | 0 → 1, "Active" |
 | Recovery | `DefenseSystem.DummyData.QS_Type` | `app.training.TM_DS_QS_TYPE` | 1 → 2, "Random" |
 
-Corrections to the community mod: Block Type is `DefenseSystem.DummyData.DP_Type`, not a GuardSetting field; Switch Block is `GuardOnlyType` (the mod used `IsGuardSwitching` for it and `GuardOnlyType` for Block Type); Throw Escape "Active" is 1, not 0; Dummy Behavior "Standing" reads 1 where the mod has Stand = 0. Full label lists come from the enums' static members (dev page: "Enum values"); record them here when dumped.
+Corrections to the community mod: Block Type is `DefenseSystem.DummyData.DP_Type`, not a GuardSetting field; Switch Block is `GuardOnlyType` (the mod used `IsGuardSwitching` for it and `GuardOnlyType` for Block Type); Throw Escape "Active" is 1, not 0; Dummy Behavior "Standing" reads 1 where the mod has Stand = 0. Full label lists are in `docs/dumps/2026-10-19-tdb71/training-enums.md` (read 2026-10-19). Of note: `TM_DS_DUMMYTYPE` is STAND 0, CROUCH 1, JUMP 2, SHORT_REPLAY 3, HUMAN 4, CPU 5, so the "Standing" row above reading 1 means the menu's first row is not STAND 0; `TM_GS_GUARD_TYPE` has six values and the menu skips some.
 
 ## Inferred from the community drill mod — NOT verified by us
 
@@ -172,9 +172,33 @@ Every endpoint has the shape `Post<Name>(<Name>In body, System.Action<<Name>Out>
 | player by user code | `Api.Fighter` | `PostSearchShortId`, `PostSearchFighterId`, `PostSearchSimple`, `PostSearchDetailed`, `PostProfile`, `PostRelationship` |
 | follow | `Api.FightersList` | `PostFollow`, `PostFollowDelete`, `PostFollowList`; friend requests exist too (`PostFriendRequests`, `PostTopFriendRequestAccept` …) but ride the platform's friend system |
 
-Constraint: the bridge cannot create the two delegate arguments, so these are not callable through `method.call` directly. Two routes: (a) drive the game's own menu-flow objects that wrap each endpoint into a plain method taking the code (needs a type search by substring to find them, plugin v0.1.5 `type.search`); (b) hook the `on200` handlers with REFramework's method hooks to observe results. The `*In` / `*Out` component types describe the request and response shapes and can be read with `type.find` + `object.describe` (e.g. `app.network.api.HatoClientAPI.Component.PostReplaySearchReplayIdIn`).
+Request and response shapes (read 2026-10-19, `docs/dumps/2026-10-19-tdb71/network-api-shapes.md`):
+
+| endpoint | In | Out |
+|---|---|---|
+| `Api.Replay.PostSearchReplayId` | `replay_id: String`, `route: app.network.api.Enum.ReplaySearchIdRoute` | `search_result_replay_list: List<CommonReplayInfo>` |
+| `Api.Replay.PostDownloadUrl` | `replay_ids: List<String>` | `download_infos: List<CommonReplayDownloadInfo>` |
+| `Api.Fighter.PostSearchShortId` | `short_id: UInt32` | `fighter_banner_list: List<CommonFighterBannerInfo>` |
+| `Api.FightersList.PostFollow` | `short_id: UInt32` | `followed_fighter_banner_info: CommonFighterBannerInfo` |
+
+`CommonReplayInfo` carries `replay_id, battle_version, replay_battle_type/sub_type, player1_info/player2_info, uploaded_at, views, is_registered`. A replay code is a string; a user code is a `UInt32`.
+
+Constraint: the bridge cannot create the two delegate arguments, so these are not callable through `method.call` directly. Two routes: (a) drive the game's own menu-flow objects that wrap each endpoint; (b) hook the `on200` handlers with REFramework's method hooks to observe results.
+
+Menu-flow wrappers located by `type.search` (2026-10-19, dumps `type-search-*.md`), not yet described or called:
+
+| feature | wrapper |
+|---|---|
+| replay by code | `app.UICFNReplaySearchResult.CallSearchReplayIdApiFlow` (siblings `CallSearchShortIdApiFlow`, `CallSearchFighterIdApiFlow`, `CallSearchDetailedApiFlow`; owner `app.UICFNReplaySearchResult` with `MainFlow`, `ReplayMenuFlow`, `FlowParam`) |
+| player by user code | `app.UICFNFightersListTabSearchChildIdSearch.CallSearchShortIdApiFlow` |
+| follow | `app.UIFlowCFNCommon.CallFollowApiFlow`1<TParam>` (and `CallFollowDeleteApiFlow`1`, `CallFollowTopApiFlow`1`) |
+| replay playback | `app.BattleReplayDataManager.AddReplayData(BattleReplayData, replayId, CommonReplayInfo, isRivalAi, ReplayPlaybackClientTab)`, `_ReplayList: List<ReplayingData>`, `GetReplayData(index)`, `SetReplayDesc(BattleDesc)`; `ReplayingData` is `(ReplayID, ReplayData, ReplayInfo, IsRivalAi, ReplayTab)` with `get_IsLocal()` |
+
+The `Call*ApiFlow` classes are nested flow steps; the expectation is that each has a constructor or `Start` taking the parent UI object plus the code, and that the parent must be live (the CFN replay/fighter screens open) for the flow to run. Describing them is the next step.
 
 ### Type dumps
+
+`docs/dumps/2026-10-19-tdb71/` also holds `type-search-{replaysearch,shortid,follow,battlereplay}.md`, `network-api-shapes.md`, `battle-objects.md`, `training-enums.md` (all 2026-10-19).
 
 `docs/dumps/2026-10-19-tdb71/training-types.md` holds `object.describe` for TrainingData, TM_RecordSetting, its FighterData list, FighterData, SlotData and RecordData. Points of interest from it:
 
@@ -190,5 +214,6 @@ Constraint: the bridge cannot create the two delegate arguments, so these are no
 - Which of `Title` / `SaveCount` makes the menu show a filled slot's name and frame count (playback works without either); or whether the label reads the runtime `app.TrainingInput.Record` copy instead.
 - Array allocation: plugin API 1.10 has no `create_managed_array`; v0.1.3 adds `array.create` through the game's `System.Array.CreateInstance`, untested.
 - Reversal settings and gauges: the community mod's field names are unverified here (dummy settings are now verified, see above).
-- Replay lookup by code and player lookup by user code: endpoints identified (see CFN endpoints); the callable wrapper objects in the UI flow are not yet located.
+- Replay lookup by code and player lookup by user code: endpoints and the menu-flow wrapper types are identified (see CFN endpoints); their constructors/entry methods and whether they run outside the CFN screens are not.
+- Live frame data: `app.PlayerBehavior` (from `BattleTimeLineManager._PlayerBehaviors`) is presentation only (motion, VFX, physics, `_PlayerID`, `BattleFrame`). The gameplay state is behind the static `gBattle` holder (`Player: nBattle.sPlayer`, `Team`, `Training: app.TrainingInput`, `Input`, `Command`, `Rollback`, `Stats`; dump `battle-objects.md`); `gBattle.Player` is where the community mod reads `mcPlayer[i]`. Not yet described.
 - `System.String` layout (length at `0x10`, UTF-16 at `0x14`) has not been exercised yet; no string field was read.

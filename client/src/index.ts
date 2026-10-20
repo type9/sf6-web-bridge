@@ -323,7 +323,7 @@ export class Sf6Bridge {
 
 	// ── tracing (experimental) ───────────────────────────────────────
 
-	/** Experimental. Hook `type.method` so its calls are recorded; `params` (parameter count) and/or `sig` (parameter type names) pick an overload. At most 16 hooks. */
+	/** Experimental. Hook `type.method` so its calls are recorded; `params` (parameter count) and/or `sig` (parameter type names) pick an overload. At most 64 hooks. */
 	hookAdd(type: string, method: string, params?: number, sig?: string[]): Promise<HookInfo> {
 		return this.request("hook.add", {
 			type,

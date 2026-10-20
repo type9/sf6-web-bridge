@@ -88,10 +88,10 @@ Convenience walk of `app.training.TrainingManager._tData`. → `{inTraining, p1F
 
 ## Tracing (experimental)
 
-A method-call tracer for watching which game methods run, with which arguments, while the player drives a menu flow by hand. Hooks are installed through REFramework's `add_hook` (pre + post) on one of 16 fixed slots. Recording never throws into the game: anything that cannot be read becomes an `error` slot.
+A method-call tracer for watching which game methods run, with which arguments, while the player drives a menu flow by hand. Hooks are installed through REFramework's `add_hook` (pre + post) on one of 64 fixed slots. Recording never throws into the game: anything that cannot be read becomes an `error` slot.
 
 ### `hook.add` `{type, method, params?, sig?}`
-`type` is a full type name, `method` a method name on it (own methods and parents', an override hiding the parent's same-signature method). With several overloads, `params` (parameter count) and/or `sig` (parameter type full names in order, as for `method.call`) pick one; when several candidates remain the error lists their signatures. → `{id, type, method, slot}`. Fails when all 16 slots are in use or the method is already hooked.
+`type` is a full type name, `method` a method name on it (own methods and parents', an override hiding the parent's same-signature method). With several overloads, `params` (parameter count) and/or `sig` (parameter type full names in order, as for `method.call`) pick one; when several candidates remain the error lists their signatures. → `{id, type, method, slot}`. Fails when all 64 slots are in use or the method is already hooked.
 
 ### `hook.remove` `{id}`
 → `{removed: true}`. Frees the slot.

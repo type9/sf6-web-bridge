@@ -17,7 +17,7 @@ using json = nlohmann::json;
 using API = reframework::API;
 
 /** Fixed number of hookable methods: the SDK hook callbacks carry no user data, so each slot has its own static trampoline. */
-constexpr int MAX_SLOTS = 16;
+constexpr int MAX_SLOTS = 64;
 /** Recorded calls kept between drains; oldest dropped first. */
 constexpr size_t RING_CAPACITY = 512;
 /** Managed strings are truncated to this many UTF-16 units when recorded. */

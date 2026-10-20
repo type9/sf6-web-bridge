@@ -248,8 +248,9 @@ export class Sf6Bridge {
 	}
 
 	/** Primitives and enums only. Returns the value read back. */
-	set(ref: Ref, name: string, value: number | boolean): Promise<number | boolean> {
-		return this.request("field.set", { h: ref.h, name, value })
+	/** Primitives and enums; strings and object references (`{h}` or null) are experimental (plugin ≥ 0.1.6). */
+	set(ref: Ref, name: string, value: number | boolean | string | Ref | null): Promise<Value> {
+		return this.request("field.set", { h: ref.h, name, value: isRef(value) ? { h: value.h } : value })
 	}
 
 	call(ref: Ref, name: string, args: Array<number | boolean | string | Ref | null> = []): Promise<Value> {

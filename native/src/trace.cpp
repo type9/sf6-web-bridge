@@ -303,16 +303,24 @@ int Tracer::on_pre(int slot, int argc, void** argv, REFrameworkTypeDefinitionHan
         c.thread = current_thread();
         c.type = hs.type_name;
         c.method = hs.method_name;
-        for (int i = 0; i < argc && argv != nullptr; i++) {
+        // REFramework (HookManager.cpp) lays argv out as [thread context,
+        // this, declared params..., two hidden scratch slots], but arg_tys
+        // holds ONLY the declared parameter types (fn->get_param_types()).
+        // So arg_tys is indexed by i - 2, never by i, and the hidden slots
+        // past the declared parameters are skipped.
+        const auto num_params = static_cast<int>(hs.param_types.size());
+        const auto last = std::min(argc, 2 + num_params);
+        for (int i = 0; i < last && argv != nullptr; i++) {
             try {
-                // argv[0]: thread context; argv[1]: `this` (null/ignored for
-                // static methods); argv[2..]: the declared parameters in order.
-                auto t = arg_tys != nullptr ? reinterpret_cast<API::TypeDefinition*>(arg_tys[i]) : nullptr;
+                API::TypeDefinition* t = nullptr;
+                if (i >= 2 && arg_tys != nullptr) {
+                    t = reinterpret_cast<API::TypeDefinition*>(arg_tys[i - 2]);
+                }
                 bool as_object = false;
                 if (i == 0) {
                     Slot s;
                     s.i = 0;
-                    s.type = t != nullptr ? t->get_full_name() : "ctx";
+                    s.type = "ctx";
                     s.what = Slot::What::Ptr;
                     safe_read(&argv[0], &s.ptr, sizeof(s.ptr));
                     c.args.push_back(std::move(s));

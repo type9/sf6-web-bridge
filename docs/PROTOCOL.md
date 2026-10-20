@@ -96,9 +96,9 @@ Returns and clears the recorded calls, oldest first. The buffer keeps the last 5
 Argument convention (as implemented; REFramework's hook passes the raw native argument list): `args[i].i` is the argv index —
 - `0`: the thread context (recorded as `ptr`, type `ctx` unless the SDK reports one)
 - `1`: `this` for instance methods (recorded as an object: `ptr`, runtime `rtype`, and a handle `h`); for static methods the slot is recorded as `ptr` with type `this(static)`
-- `2..`: the declared parameters in order
+- `2..`: the declared parameters in order; REFramework appends two hidden scratch slots after them, which are not recorded
 
-`type` is the type REFramework reports in `arg_tys[i]`, falling back to the declared parameter type (or the declaring type for `this`) when it reports none. Values: primitives and enums are read inline from the slot (`value`); `System.String` is decoded (`str`, capped at 256 characters, `null` for a null reference); other references are recorded as `ptr` plus, when the pointer looks like a live managed object, its runtime type `rtype` and a handle `h` that `object.describe` / `field.get` accept (the object is referenced for the life of the handle). Anything else (inline value types, unknown types) is `ptr`: the raw 8-byte slot. `ret` is the return value recorded the same way by the post hook (absent for `void`); it is paired with the newest unfinished call of the same hook on the same thread.
+`type` is the type REFramework reports in `arg_tys` (which holds only the declared parameters, so slot `i` reads `arg_tys[i-2]`), falling back to the declared parameter type (or the declaring type for `this`) when it reports none. Values: primitives and enums are read inline from the slot (`value`); `System.String` is decoded (`str`, capped at 256 characters, `null` for a null reference); other references are recorded as `ptr` plus, when the pointer looks like a live managed object, its runtime type `rtype` and a handle `h` that `object.describe` / `field.get` accept (the object is referenced for the life of the handle). Anything else (inline value types, unknown types) is `ptr`: the raw 8-byte slot. `ret` is the return value recorded the same way by the post hook (absent for `void`); it is paired with the newest unfinished call of the same hook on the same thread.
 
 ## Safety
 

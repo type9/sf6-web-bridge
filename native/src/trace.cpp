@@ -1,5 +1,6 @@
 #include "trace.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdio>
 #include <cstring>
